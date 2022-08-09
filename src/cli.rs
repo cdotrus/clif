@@ -38,8 +38,22 @@ impl Token {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Help<'c>(&'c str);
+#[derive(Debug, PartialEq, Clone)]
+pub struct Help<'c>(&'c str, Option<usize>);
+
+impl<'c> Help<'c> {
+    fn new() -> Self {
+        Self("", None)
+    }
+
+    pub fn info(&self) -> &str {
+        &self.0
+    }
+
+    pub fn usage_at(&self) -> Option<usize> {
+        self.1
+    }
+}
 
 #[derive(Debug, PartialEq)]
 pub struct Cli<'c> {
@@ -132,16 +146,24 @@ impl<'c> Cli<'c> {
         self
     }
 
-    /// Sets the help text to display when detecting `--help` on the command-line.
-    pub fn help(&mut self, text: &'c str) -> () {
-        self.help = Some(Help(text));
+    /// Sets the help `text` to display when detecting `--help, -h` on the command-line.
+    /// 
+    /// If the help text has a line describing overall usage, you can specify it with `usage_line`.
+    /// This value the 0-indexed line to print when a missing positional error occurs.
+    pub fn help(&mut self, text: &'c str, usage_line: Option<usize>) -> Result<(), CliError<'c>>  {
+        self.help = Some(Help(text, usage_line));
+        // check for flag if not already raised
+        if self.asking_for_help == false {
+            self.asking_for_help = self.check_flag(Flag::new("help").switch('h'))?;
+        }
+        Ok(())
     }
 
     /// Checks if help has been raised and will return its own error for displaying
     /// help.
     fn prioritize_help(&self) -> Result<(), CliError<'c>> {
-        if self.asking_for_help == true {
-            Err(CliError::Help(self.help.as_ref().unwrap_or(&Help("")).0))
+        if self.asking_for_help == true && self.help.is_some() {
+            Err(CliError::Help(self.help.as_ref().unwrap_or(&Help::new()).0))
         } else {
             Ok(())
         }
@@ -215,7 +237,8 @@ impl<'c> Cli<'c> {
             Ok(s)
         // try to offer a spelling suggestion otherwise say we've hit an unexpected argument
         } else {
-            if let Some(w) = seqalin::sel_min_edit_str(&s, &words, self.threshold)  {
+            // bypass sequence alignment algorithm if threshold == 0
+            if let Some(w) = if self.threshold > 0 { seqalin::sel_min_edit_str(&s, &words, self.threshold) } else { None } {
                 Err(CliError::SuggestSubcommand(s, w.to_string()))
             } else {
                 self.prioritize_help()?;
@@ -237,7 +260,7 @@ impl<'c> Cli<'c> {
                     Err(e) => {
                         self.prioritize_help()?;
                         self.prioritize_suggestion()?;
-                        Err(CliError::BadType(self.known_args.pop().unwrap(), e.to_string()))
+                        Err(CliError::BadType(self.known_args.pop().unwrap(), s, e.to_string()))
                     }
                 }
             },
@@ -257,7 +280,7 @@ impl<'c> Cli<'c> {
         } else {
             self.prioritize_help()?;
             self.is_empty()?;
-            Err(CliError::MissingPositional(self.known_args.pop().unwrap(), self.help.as_ref().unwrap_or(&Help("")).0.to_string()))
+            Err(CliError::MissingPositional(self.known_args.pop().unwrap(), self.help.as_ref().unwrap_or(&Help::new()).clone()))
         }
     }
 
@@ -271,7 +294,7 @@ impl<'c> Cli<'c> {
         let r = kv.iter().find_map(|f| {
             match self.tokens.get(*f.1.first().unwrap()).unwrap() {
                 Some(Token::Flag(_)) => {
-                    if let Some(word) = seqalin::sel_min_edit_str(f.0, &bank, self.threshold) {
+                    if let Some(word) = if self.threshold > 0 { seqalin::sel_min_edit_str(f.0, &bank, self.threshold) } else { None } {
                         Some(CliError::SuggestArg(format!("--{}", f.0), format!("--{}", word)))
                     } else {
                         None
@@ -314,7 +337,7 @@ impl<'c> Cli<'c> {
                     Ok(r) => transform.push(r),
                     Err(e) => {
                         self.prioritize_help()?;
-                        return Err(CliError::BadType(self.known_args.pop().unwrap(), e.to_string()))
+                        return Err(CliError::BadType(self.known_args.pop().unwrap(), s, e.to_string()))
                     }
                 }
             } else {
@@ -346,7 +369,7 @@ impl<'c> Cli<'c> {
                         Ok(r) => Ok(Some(r)),
                         Err(e) => {
                             self.prioritize_help()?;
-                            Err(CliError::BadType(self.known_args.pop().unwrap(), e.to_string()))
+                            Err(CliError::BadType(self.known_args.pop().unwrap(), s, e.to_string()))
                         }
                     }
                 } else {
@@ -435,7 +458,7 @@ impl<'c> Cli<'c> {
                     Token::Flag(_) => {
                         // try to match it with a valid flag from word bank
                         let bank  = self.known_args_as_flag_names();
-                        if let Some(s) = seqalin::sel_min_edit_str(key, &bank, self.threshold)  {
+                        if let Some(s) = if self.threshold > 0 { seqalin::sel_min_edit_str(key, &bank, self.threshold) } else { None } {
                             return Err(CliError::SuggestArg(format!("--{}", key), format!("--{}", s)));
                         }
                         "--"

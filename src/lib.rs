@@ -38,7 +38,7 @@ mod tests {
         impl FromCli for Radd {
             fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, errors::CliError<'c>> where Self: Sized {
                 // set help text in case of an error
-                cli.help(HELP);
+                cli.help(HELP, Some(3));
                 let radd = Radd {
                     verbose: cli.check_flag(Flag::new("verbose"))?,
                     lhs: cli.require_positional(Positional::new("lhs"))?,
@@ -51,16 +51,15 @@ mod tests {
         }
 
         impl Command<()> for Radd {
-            type Err = ();
+            type Status = ();
 
-            fn exec(&self, _: &()) -> Result<(), Self::Err> {
+            fn exec(&self, _: &()) -> Self::Status {
                 let sum: u16 = self.run();
                 if self.verbose == true {
                     println!("{} + {} = {}", self.lhs, self.rhs, sum);
                 } else {
                     println!("{}", sum);
                 }
-                Ok(())
             }
         }
 

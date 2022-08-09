@@ -3,8 +3,8 @@ use std::fmt::Debug;
 use crate::errors::CliError;
 
 pub trait Command<T>: Debug {
-    type Err;
-    fn exec(&self, context: &T) -> Result<(), Self::Err>;
+    type Status;
+    fn exec(&self, context: &T) -> Self::Status;
 }
 
 pub trait FromCli {
@@ -39,9 +39,10 @@ mod test {
     }
 
     impl Command<()> for Add {
-        type Err = ();
-        fn exec(&self, _: &()) -> Result<(), Self::Err> {
-           Ok(println!("{}", self.run()))
+        type Status = ();
+
+        fn exec(&self, _: &()) -> Self::Status {
+           println!("{}", self.run())
         }
     }
 
@@ -58,7 +59,7 @@ mod test {
 
     impl FromCli for Add {
         fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self,  CliError<'c>> {
-            cli.help("add <lhs> <rhs> [--verbose]");
+            cli.help("    add <lhs> <rhs> [--verbose]", Some(0));
             // the ability to "learn options" beforehand is possible, or can be skipped
             // "learn options" here (take in known args (as ref?))
             Ok(Add {
@@ -77,12 +78,11 @@ mod test {
     }
 
     impl Command<()> for Op {
-        type Err = ();
-        fn exec(&self, context: &()) -> Result<(), Self::Err> {
+        type Status = ();
+
+        fn exec(&self, context: &()) -> Self::Status {
             if let Some(command) = &self.command {
                 command.exec(context)
-            } else {
-                Ok(())
             }
         }
     }
@@ -115,8 +115,8 @@ mod test {
     }
 
     impl Command<()> for OpSubcommand {
-        type Err = ();
-        fn exec(&self, _: &()) -> Result<(), Self::Err> {
+        type Status = ();
+        fn exec(&self, _: &()) -> Self::Status {
             match self {
                 OpSubcommand::Add(c) => c.exec(&()),
             }
