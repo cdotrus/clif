@@ -38,7 +38,7 @@ mod tests {
         impl FromCli for Radd {
             fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, errors::CliError<'c>> where Self: Sized {
                 // set help text in case of an error
-                cli.help(HELP, Some(3));
+                cli.help(HELP, Some(3))?;
                 let radd = Radd {
                     verbose: cli.check_flag(Flag::new("verbose"))?,
                     lhs: cli.require_positional(Positional::new("lhs"))?,
