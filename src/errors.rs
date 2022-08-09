@@ -6,17 +6,29 @@ use crate::cli::Help;
 
 #[derive(Debug, PartialEq)]
 pub enum CliError<'a> {
+    /// argument, value, error message 
     BadType(Arg<'a>, String, String),
+    /// argument, help
     MissingPositional(Arg<'a>, Help<'a>),
+    /// argument
     DuplicateOptions(Arg<'a>),
+    /// argument
     ExpectingValue(Arg<'a>),
+    /// argument, value
     UnexpectedValue(Arg<'a>, String),
+    /// argument, subcommand
     OutOfContextArgSuggest(String, String),
+    /// argument
     UnexpectedArg(String),
+    /// argument, suggestion
     SuggestArg(String, String),
+    /// subcommand, suggestion
     SuggestSubcommand(String, String),
+    /// argument, previous command
     UnknownSubcommand(Arg<'a>, String),
+    /// error message
     BrokenRule(String),
+    /// quick help text
     Help(&'a str),
 }
 
@@ -33,13 +45,11 @@ impl<'a> Error for CliError<'a> {}
 
 impl<'a> Display for CliError<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> { 
-
         // header
         match self {
             Self::Help(_) => (),
             _ => write!(f, "{}", "error: ".red().bold())?
         };
-
         // body
         match self {
             Self::Help(h) => write!(f, "{}", h),
@@ -68,7 +78,6 @@ impl<'a> Display for CliError<'a> {
             Self::UnknownSubcommand(c, a) => write!(f, "'{}' is not a valid subcommand for {}", a, c.to_string().yellow()),
             Self::BrokenRule(r) => write!(f, "a rule conflict occurred from {}", r),
         }?;
-
         // footer
         match self {
             Self::OutOfContextArgSuggest(_, _) | 
