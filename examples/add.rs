@@ -22,7 +22,7 @@ fn go() -> u8 {
             app.exec(&()) 
         },
         // report cli error
-        Err(err) => err.exit()
+        Err(err) => err.explain()
     }
 }
 

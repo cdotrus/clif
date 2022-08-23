@@ -46,7 +46,7 @@ impl<'a> CliError<'a> {
 
     /// Displays the cli error to the console and returns its respective error
     /// code.
-    pub fn exit(&self) -> u8 {
+    pub fn explain(&self) -> u8 {
         match &self {
             // handle help information returning a zero exit code
             Self::Help(_) => println!("{}", self.to_string()),
