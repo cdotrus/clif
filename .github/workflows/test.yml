@@ -1,0 +1,28 @@
+name: build
+on:
+  workflow_call:
+
+env:
+  PROJECT: orbit
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Fetch repository
+        uses: actions/checkout@v2
+
+      - name: Configure rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+
+      - name: Enable Cargo caching
+        uses: Swatinem/rust-cache@v1
+
+      - name: Test
+        run: cargo test

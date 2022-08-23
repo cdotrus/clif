@@ -1,7 +1,7 @@
-use yacli::command::{FromCli, Command, Runner};
-use yacli::cli::Cli;
-use yacli::errors::CliError;
-use yacli::arg::*;
+use cliprs::command::{FromCli, Command, Runner};
+use cliprs::cli::Cli;
+use cliprs::errors::CliError;
+use cliprs::arg::*;
 use std::env::args;
 
 fn main() {

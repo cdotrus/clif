@@ -1,6 +1,6 @@
-# `yacli`
+# `cliprs`
 
-## A lightweight command-line argument parser.
+## A lightweight and flexible command-line argument parser written in Rust.
 
 
 ### Features
