@@ -47,7 +47,7 @@ impl Runner<()> for Addrs {}
 impl FromCli for Addrs {
     fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, CliError<'c>> where Self: Sized {
         // set short help text in case of an error
-        cli.help(HELP, Some(USAGE_LINE))?;
+        cli.help(HELP, Some(USAGE_LINE..USAGE_LINE+2))?;
         let radd = Addrs {
             verbose: cli.check_flag(Flag::new("verbose"))?,
             lhs: cli.require_positional(Positional::new("lhs"))?,
@@ -73,7 +73,8 @@ impl Command<()> for Addrs {
     }
 }
 
-const USAGE_LINE: usize = 3;
+ // 0-indexed from `HELP` string
+const USAGE_LINE: usize = 2;
 
 const HELP: &str = "\
 Adds two numbers together.

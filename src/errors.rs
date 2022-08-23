@@ -78,11 +78,13 @@ impl<'a> Display for CliError<'a> {
                 let usage = match help.usage_at() { 
                     None => String::new(),
                     Some(i) =>  {
-                        if let Some(text) = help.info().split_terminator('\n').skip(i).next() {
-                            "\n\nUsage:\n".to_string() + text
-                        } else {
-                            panic!("usage directive line is out of bounds on help:\n\"\"\"\n{}\"\"\"", help.info())
+                        let mut content = String::from("\n");
+                        let mut lines = help.info().split_terminator('\n').skip(i.start);
+                        for _ in 0..i.end-i.start {
+                            content.push('\n');
+                            content.push_str(lines.next().expect("usage directive range is out of bounds"));
                         }
+                        content
                     }
                 };
                 write!(f, "missing required argument '{}'{}", p, usage)

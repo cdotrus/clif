@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::Range;
 use crate::errors::CliError;
 use crate::arg::*;
 use std::str::FromStr;
@@ -39,7 +40,7 @@ impl Token {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Help<'c>(&'c str, Option<usize>);
+pub struct Help<'c>(&'c str, Option<Range<usize>>);
 
 impl<'c> Help<'c> {
     fn new() -> Self {
@@ -50,8 +51,8 @@ impl<'c> Help<'c> {
         &self.0
     }
 
-    pub fn usage_at(&self) -> Option<usize> {
-        self.1
+    pub fn usage_at(&self) -> Option<&Range<usize>> {
+        self.1.as_ref()
     }
 }
 
@@ -150,7 +151,7 @@ impl<'c> Cli<'c> {
     /// 
     /// If the help text has a line describing overall usage, you can specify it with `usage_line`.
     /// This value the 0-indexed line to print when a missing positional error occurs.
-    pub fn help(&mut self, text: &'c str, usage_line: Option<usize>) -> Result<(), CliError<'c>>  {
+    pub fn help(&mut self, text: &'c str, usage_line: Option<Range<usize>>) -> Result<(), CliError<'c>>  {
         self.help = Some(Help(text, usage_line));
         // check for flag if not already raised
         if self.asking_for_help == false {
