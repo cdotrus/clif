@@ -1,12 +1,9 @@
-name: build
+name: test
 on:
-  workflow_call:
-
-env:
-  PROJECT: orbit
+  push:
 
 jobs:
-  build:
+  test:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
