@@ -15,7 +15,7 @@ fn go() -> u8 {
         .threshold(4)
         .tokenize(args());
 
-    match Radd::from_cli(&mut cli) {
+    match Addrs::from_cli(&mut cli) {
         // construct the application
         Ok(app) => { 
             std::mem::drop(cli); 
@@ -34,29 +34,29 @@ fn go() -> u8 {
     }
 }
 
-/// `Radd` is 'rust-add' that can add two unsigned 8-bit values together.
+/// `Addrs` is 'add-rust' that can add two unsigned 8-bit values together.
 #[derive(PartialEq, Debug)]
-struct Radd {
+struct Addrs {
     lhs: u8,
     rhs: u8, 
     verbose: bool,
 }
 
-impl Radd {
+impl Addrs {
     /// Adds `lhs` and `rhs` together.
     fn run(&self) -> u16 {
         self.lhs as u16 + self.rhs as u16
     }
 }
 
-// enforce the `Radd` struct to implement `FromCli` and `Command<T>` traits
-impl Runner<()> for Radd {}
+// enforce the `Addrs` struct to implement `FromCli` and `Command<T>` traits
+impl Runner<()> for Addrs {}
 
-impl FromCli for Radd {
+impl FromCli for Addrs {
     fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, CliError<'c>> where Self: Sized {
         // set short help text in case of an error
         cli.help(HELP, Some(USAGE_LINE))?;
-        let radd = Radd {
+        let radd = Addrs {
             verbose: cli.check_flag(Flag::new("verbose"))?,
             lhs: cli.require_positional(Positional::new("lhs"))?,
             rhs: cli.require_positional(Positional::new("rhs"))?,
@@ -67,7 +67,7 @@ impl FromCli for Radd {
     }
 }
 
-impl Command<()> for Radd {
+impl Command<()> for Addrs {
     type Status = u8;
 
     fn exec(&self, _: &()) -> Self::Status {
@@ -87,7 +87,7 @@ const HELP: &str = "\
 Adds two numbers together.
 
 Usage:
-    radd [options] <lhs> <rhs> 
+    addrs [options] <lhs> <rhs> 
 
 Args:
     <lhs>       left-hand operand
@@ -103,7 +103,7 @@ mod test {
 
     #[test]
     fn backend_logic() {
-        let app = Radd {
+        let app = Addrs {
             lhs: 10,
             rhs: 9,
             verbose: false,
