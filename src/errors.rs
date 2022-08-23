@@ -4,6 +4,9 @@ use std::error::Error;
 use colored::*;
 use crate::cli::Help;
 
+const BAD_CODE: u8 = 101;
+const OKAY_CODE: u8 = 0;
+
 #[derive(Debug, PartialEq)]
 pub enum CliError<'a> {
     /// argument, value, error message 
@@ -33,11 +36,24 @@ pub enum CliError<'a> {
 }
 
 impl<'a> CliError<'a> {
+    /// Returns `OKAY_CODE` for help error and `BAD_CODE` otherwise.
     pub fn code(&self) -> u8 {
         match &self {
-            Self::Help(_) => 0,
-            _ => 101
+            Self::Help(_) => OKAY_CODE,
+            _ => BAD_CODE
         }
+    }
+
+    /// Displays the cli error to the console and returns its respective error
+    /// code.
+    pub fn exit(&self) -> u8 {
+        match &self {
+            // handle help information returning a zero exit code
+            Self::Help(_) => println!("{}", self.to_string()),
+            // display the cli parsing error message
+            _ => eprintln!("{}", self.to_string()),
+        }
+        self.code()
     }
 }
 

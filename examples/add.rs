@@ -22,15 +22,7 @@ fn go() -> u8 {
             app.exec(&()) 
         },
         // report cli error
-        Err(err) => { 
-            match err.code() { 
-                // handle help information returning a zero exit code
-                0 => println!("{}", err.to_string()),
-                // display the cli parsing error message
-                _ => eprintln!("{}", err.to_string())
-            }
-            err.code()
-        }
+        Err(err) => err.exit()
     }
 }
 
