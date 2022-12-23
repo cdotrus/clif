@@ -7,6 +7,12 @@ use crate::command::FromCli;
 use crate::seqalin;
 use crate::seqalin::Cost;
 
+mod symbol {
+    // series of characters to denote flags and switches
+    pub const SWITCH: &str = "-";
+    pub const FLAG: &str = "--";
+}
+
 #[derive(Debug, PartialEq)]
 enum Token {
     UnattachedArgument(usize, String),
@@ -91,7 +97,7 @@ impl<'c> Cli<'c> {
             if terminated == true {
                 tokens.push(Some(Token::Ignore(i, arg)));
             // handle an option
-            } else if arg.starts_with('-') {
+            } else if arg.starts_with(symbol::SWITCH) {
                 // try to separate from '=' sign
                 let mut value: Option<String> = None;
                 let mut option: Option<String> = None;
@@ -106,7 +112,7 @@ impl<'c> Cli<'c> {
                     arg = opt;
                 }
                 // handle long flag signal
-                if arg.starts_with("--") {
+                if arg.starts_with(symbol::FLAG) {
                     arg.replace_range(0..=1, "");
                     // caught the terminator (purely "--")
                     if arg.is_empty() {
@@ -455,14 +461,14 @@ impl<'c> Cli<'c> {
             // check what type of token it was to determine if it was called with '-' or '--'
             if let Some(t) = self.tokens.get(val).unwrap() {
                 let prefix = match t {
-                    Token::Switch(_, _) => "-",
+                    Token::Switch(_, _) => symbol::SWITCH,
                     Token::Flag(_) => {
                         // try to match it with a valid flag from word bank
                         let bank  = self.known_args_as_flag_names();
                         if let Some(s) = if self.threshold > 0 { seqalin::sel_min_edit_str(key, &bank, self.threshold) } else { None } {
                             return Err(CliError::SuggestArg(format!("--{}", key), format!("--{}", s)));
                         }
-                        "--"
+                        symbol::FLAG
                     },
                     _ => panic!("no other tokens are allowed in hashmap"),
                 };
@@ -490,7 +496,7 @@ impl<'c> Cli<'c> {
                     Err(CliError::UnexpectedArg(s.to_string()))
                 }
                 Some(Token::Terminator(_)) => {
-                    Err(CliError::UnexpectedArg("--".to_string()))
+                    Err(CliError::UnexpectedArg(symbol::FLAG.to_string()))
                 }
                 _ => panic!("no other tokens types should be left")
             }
@@ -692,7 +698,7 @@ mod test {
         assert_eq!(cli.is_empty(), Ok(()));
 
         let mut cli = Cli::new().tokenize(args(
-            vec!["orbit", "new", "rary.gates", "--"]
+            vec!["orbit", "new", "rary.gates", symbol::FLAG]
         ));
         // removes only valid args/flags/opts
         let _  = cli.check_flag(Flag::new("help")).unwrap();
@@ -709,7 +715,7 @@ mod test {
         assert!(cli.is_empty().is_err());
 
         let mut cli = Cli::new().tokenize(args(
-            vec!["orbit", "--", "some", "extra", "words"]
+            vec!["orbit", symbol::FLAG, "some", "extra", "words"]
         ));
         let _: Vec<String> = cli.check_remainder().unwrap();
         // terminator removed as well as its arguments that were ignored
@@ -772,7 +778,7 @@ mod test {
 
         // final boss
         let cli = Cli::new().tokenize(args(
-            vec!["orbit", "--help", "-v", "new", "ip", "--lib", "--name=rary.gates", "--help", "-sci", "--", "--map", "synthesis", "-jto"]
+            vec!["orbit", "--help", "-v", "new", "ip", "--lib", "--name=rary.gates", "--help", "-sci", symbol::FLAG, "--map", "synthesis", "-jto"]
         ));
         assert_eq!(cli.tokens, vec![
             Some(Token::Flag(0)),
@@ -824,7 +830,7 @@ mod test {
     #[test]
     fn flags_in_map() {
         let cli = Cli::new().tokenize(args(
-            vec!["orbit", "--help", "-v", "new", "ip", "--lib", "--name=rary.gates", "--help", "-sci", "--", "--map", "synthesis", "-jto"]
+            vec!["orbit", "--help", "-v", "new", "ip", "--lib", "--name=rary.gates", "--help", "-sci", symbol::FLAG, "--map", "synthesis", "-jto"]
         ));
         let mut opt_store = HashMap::<String, Vec<usize>>::new();
         // store long options
@@ -842,7 +848,7 @@ mod test {
     #[test]
     fn take_unattached_args() {
         let mut cli = Cli::new().tokenize(args(
-            vec!["orbit", "--help", "-v", "new", "ip", "--lib", "--name=rary.gates", "--help", "-scii", "get", "--", "--map", "synthesis", "-jto"]
+            vec!["orbit", "--help", "-v", "new", "ip", "--lib", "--name=rary.gates", "--help", "-scii", "get", symbol::FLAG, "--map", "synthesis", "-jto"]
         ));
 
         assert_eq!(cli.next_uarg().unwrap(), "new".to_string());
@@ -854,7 +860,7 @@ mod test {
     #[test]
     fn take_remainder_args() {
         let mut cli = Cli::new().tokenize(args(
-            vec!["orbit", "--help", "-v", "new", "ip", "--lib", "--name=rary.gates", "--help", "-scii", "get", "--", "--map", "synthesis", "-jto"]
+            vec!["orbit", "--help", "-v", "new", "ip", "--lib", "--name=rary.gates", "--help", "-scii", "get", symbol::FLAG, "--map", "synthesis", "-jto"]
         ));
         assert_eq!(cli.check_remainder().unwrap(), vec!["--map", "synthesis", "-jto"]);
         // the items were removed from the token stream
