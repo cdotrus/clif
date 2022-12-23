@@ -32,6 +32,7 @@ struct Addrs {
     lhs: u8,
     rhs: u8, 
     verbose: bool,
+    count: Vec<u8>,
 }
 
 impl Addrs {
@@ -50,6 +51,7 @@ impl FromCli for Addrs {
         cli.help(HELP, Some(USAGE_LINE..USAGE_LINE+2))?;
         let radd = Addrs {
             verbose: cli.check_flag(Flag::new("verbose"))?,
+            count: cli.check_option_n(Optional::new("count").switch('c'), 3)?.unwrap_or(vec![]),
             lhs: cli.require_positional(Positional::new("lhs"))?,
             rhs: cli.require_positional(Positional::new("rhs"))?,
         };
@@ -100,6 +102,7 @@ mod test {
             lhs: 10,
             rhs: 9,
             verbose: false,
+            count: None,
         };
 
         assert_eq!(app.run(), 19);

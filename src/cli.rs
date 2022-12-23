@@ -319,42 +319,6 @@ impl<'c> Cli<'c> {
         }
     }
 
-    /// Queries for all values behind an `Optional`.
-    /// 
-    /// Errors if a parsing fails from string.
-    pub fn check_option_all<'a, T: FromStr>(&mut self, o: Optional<'c>) -> Result<Option<Vec<T>>, CliError<'c>>
-    where <T as FromStr>::Err: std::error::Error {
-        // collect information on where the flag can be found
-        let mut locs = self.take_flag_locs(o.get_flag_ref().get_name_ref());
-        if let Some(c) = o.get_flag_ref().get_switch_ref() {
-            locs.extend(self.take_switch_locs(c));
-        }
-        self.known_args.push(Arg::Optional(o));
-        // pull values from where the option flags were found (including switch)
-        let values = self.pull_flag(locs, true);
-        if values.is_empty() {
-            return Ok(None)
-        }
-        // try to convert each value into the type T
-        let mut transform = Vec::<T>::with_capacity(values.len());
-        for val in values {
-            if let Some(s) = val {
-                let result = s.parse::<T>();
-                match result {
-                    Ok(r) => transform.push(r),
-                    Err(e) => {
-                        self.prioritize_help()?;
-                        return Err(CliError::BadType(self.known_args.pop().unwrap(), s, e.to_string()))
-                    }
-                }
-            } else {
-                self.prioritize_help()?;
-                return Err(CliError::ExpectingValue(self.known_args.pop().unwrap()))
-            }
-        }
-        Ok(Some(transform))
-    }
-
     /// Queries for a value of `Optional`.
     /// 
     /// Errors if there are multiple values or if parsing fails.
@@ -390,6 +354,62 @@ impl<'c> Cli<'c> {
                 Err(CliError::DuplicateOptions(self.known_args.pop().unwrap()))
             }
         }
+    }
+
+    /// Queries for up to `n` values behind an `Optional`.
+    /// 
+    /// Errors if a parsing fails from string or if the number of detected optionals is > n.
+    pub fn check_option_n<'a, T: FromStr>(&mut self, o: Optional<'c>, n: usize) -> Result<Option<Vec<T>>, CliError<'c>> 
+    where <T as FromStr>::Err: std::error::Error {
+        let values = self.check_option_all::<T>(o)?;
+        match values {
+            // verify the size of the vector does not exceed `n`
+            Some(r) => {
+                match r.len() <= n {
+                    true => Ok(Some(r)),
+                    false => Err(CliError::ExceedingMaxCount(n, r.len(), self.known_args.pop().unwrap())),
+                }
+            },
+            None => {
+                Ok(None)
+            }
+        }
+    }
+
+    /// Queries for all values behind an `Optional`.
+    /// 
+    /// Errors if a parsing fails from string.
+    pub fn check_option_all<'a, T: FromStr>(&mut self, o: Optional<'c>) -> Result<Option<Vec<T>>, CliError<'c>>
+    where <T as FromStr>::Err: std::error::Error {
+        // collect information on where the flag can be found
+        let mut locs = self.take_flag_locs(o.get_flag_ref().get_name_ref());
+        if let Some(c) = o.get_flag_ref().get_switch_ref() {
+            locs.extend(self.take_switch_locs(c));
+        }
+        self.known_args.push(Arg::Optional(o));
+        // pull values from where the option flags were found (including switch)
+        let values = self.pull_flag(locs, true);
+        if values.is_empty() {
+            return Ok(None)
+        }
+        // try to convert each value into the type T
+        let mut transform = Vec::<T>::with_capacity(values.len());
+        for val in values {
+            if let Some(s) = val {
+                let result = s.parse::<T>();
+                match result {
+                    Ok(r) => transform.push(r),
+                    Err(e) => {
+                        self.prioritize_help()?;
+                        return Err(CliError::BadType(self.known_args.pop().unwrap(), s, e.to_string()))
+                    }
+                }
+            } else {
+                self.prioritize_help()?;
+                return Err(CliError::ExpectingValue(self.known_args.pop().unwrap()))
+            }
+        }
+        Ok(Some(transform))
     }
 
     /// Queries if a flag was raised once and only once. 
@@ -1014,5 +1034,23 @@ mod test {
     fn take_impossible_token_terminator_str() {
         let t = Token::Terminator(9);
         t.take_str();
+    }
+
+    #[test]
+    fn check_option_n() {
+        let mut cli = Cli::new().tokenize(args(
+            vec!["orbit", "command", "--rate", "10"]
+        ));
+        assert_eq!(cli.check_option_n(Optional::new("rate"), 1).unwrap(), Some(vec![10]));
+
+        let mut cli = Cli::new().tokenize(args(
+            vec!["orbit", "command", "--rate", "10"]
+        ));
+        assert_eq!(cli.check_option_n(Optional::new("rate"), 2).unwrap(), Some(vec![10]));
+
+        let mut cli = Cli::new().tokenize(args(
+            vec!["orbit", "command", "--rate", "10", "--rate", "4", "--rate", "3"]
+        ));
+        assert_eq!(cli.check_option_n::<u8>(Optional::new("rate"), 2).is_err(), true);
     }
 }

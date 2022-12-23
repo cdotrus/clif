@@ -33,6 +33,8 @@ pub enum CliError<'a> {
     BrokenRule(String),
     /// quick help text
     Help(&'a str),
+    /// n, incorrect size, argument
+    ExceedingMaxCount(usize, usize, Arg<'a>),
 }
 
 impl<'a> CliError<'a> {
@@ -68,6 +70,7 @@ impl<'a> Display for CliError<'a> {
         };
         // body
         match self {
+            Self::ExceedingMaxCount(n, s, o) => write!(f, "option '{}' was requested {} times, but cannot exceed {}", o, s, n),
             Self::Help(h) => write!(f, "{}", h),
             Self::SuggestArg(a, sug) => write!(f, "unknown argument '{}'\n\nDid you mean {}?", a.yellow(), sug.green()),
             Self::SuggestSubcommand(a, sug) => write!(f, "unknown subcommand '{}'\n\nDid you mean {}?", a.yellow(), sug.green()),
