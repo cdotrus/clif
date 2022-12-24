@@ -34,6 +34,7 @@ enum Token {
     AttachedArgument(usize, String),
     Flag(usize),
     Switch(usize, char),
+    EmptySwitch(usize),
     Ignore(usize, String),
     Terminator(usize),
 }
@@ -53,6 +54,7 @@ impl Token {
             Self::UnattachedArgument(i, _) => i,
             Self::AttachedArgument(i, _) => i,
             Self::Flag(i) => i,
+            Self::EmptySwitch(i) => i,
             Self::Switch(i, _) => i,
             Self::Terminator(i) => i,
             Self::Ignore(i, _) => i,
@@ -123,8 +125,17 @@ impl<'c> Cli<'c> {
                     }
                 // handle short flag signal
                 } else {
+                    // skip the initial switch character/symbol (1 char)
                     let mut arg = arg.chars().skip(1);
-                    // split switches into individual components
+                    // check if the switch is empty by evaulating the first possible switch position
+                    if let Some(c) = arg.next() {
+                        store.entry(Tag::Switch(c.to_string())).or_insert(Vec::new()).push(tokens.len());
+                        tokens.push(Some(Token::Switch(i, c)));
+                    } else {
+                        store.entry(Tag::Switch(String::new())).or_insert(Vec::new()).push(tokens.len());
+                        tokens.push(Some(Token::EmptySwitch(i)));
+                    }
+                    // continuously split switches into individual components
                     while let Some(c) = arg.next() {
                         store.entry(Tag::Switch(c.to_string())).or_insert(Vec::new()).push(tokens.len());
                         tokens.push(Some(Token::Switch(i, c)));
@@ -513,7 +524,7 @@ impl<'c> Cli<'c> {
             // check what type of token it was to determine if it was called with '-' or '--'
             if let Some(t) = self.tokens.get(val).unwrap() {
                 let prefix = match t {
-                    Token::Switch(_, _) => symbol::SWITCH,
+                    Token::Switch(_, _) | Token::EmptySwitch(_) => symbol::SWITCH,
                     Token::Flag(_) => {
                         // try to match it with a valid flag from word bank
                         let bank  = self.known_args_as_flag_names();
