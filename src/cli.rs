@@ -13,6 +13,12 @@ mod symbol {
     pub const FLAG: &str = "--";
 }
 
+mod help {
+    pub const FLAG: &str = "help";
+    pub const SWITCH: char = 'h';
+}
+
+
 #[derive(Debug, PartialEq)]
 enum Token {
     UnattachedArgument(usize, String),
@@ -161,7 +167,7 @@ impl<'c> Cli<'c> {
         self.help = Some(Help(text, usage_line));
         // check for flag if not already raised
         if self.asking_for_help == false {
-            self.asking_for_help = self.check_flag(Flag::new("help").switch('h'))?;
+            self.asking_for_help = self.check_flag(Flag::new(help::FLAG).switch(help::SWITCH))?;
         }
         Ok(())
     }
@@ -271,9 +277,7 @@ impl<'c> Cli<'c> {
                     }
                 }
             },
-            None => {
-                Ok(None)
-            }
+            None => Ok(None),
         }
     }
 
@@ -416,6 +420,21 @@ impl<'c> Cli<'c> {
     /// 
     /// Errors if the flag has an attached value or was raised multiple times.
     pub fn check_flag<'a>(&mut self, f: Flag<'c>) -> Result<bool, CliError<'c>> {
+        let occurences = self.check_flag_all(f)?;
+        match occurences > 1 {
+            true => {
+                self.prioritize_help()?;
+                Err(CliError::DuplicateOptions(self.known_args.pop().unwrap()))
+            },
+            // the flag was either raised once or not at all
+            false => Ok(occurences == 1),
+        }
+    }
+
+    /// Queries for the number of times a flag was raised.
+    /// 
+    /// Errors if the flag has an attached value. Returning a zero indicates the flag was never raised.
+    pub fn check_flag_all<'a>(&mut self, f: Flag<'c>) -> Result<usize, CliError<'c>> {
         // collect information on where the flag can be found
         let mut locs = self.take_flag_locs(f.get_name_ref());
         if let Some(c) = f.get_switch_ref() {
@@ -428,17 +447,25 @@ impl<'c> Cli<'c> {
             self.prioritize_help()?;
             return Err(CliError::UnexpectedValue(self.known_args.pop().unwrap(), val.take().unwrap()));
         } else {
-            if occurences.len() > 1 {
-                self.prioritize_help()?;
-                Err(CliError::DuplicateOptions(self.known_args.pop().unwrap()))
-            } else {
-                let raised = occurences.len() != 0;
-                // check if the user is asking for help
-                if raised && "help" == self.known_args.last().unwrap().as_flag_ref().get_name_ref() {
-                    self.asking_for_help = true;
-                }
-                Ok(raised)
+            let raised = occurences.len() != 0;
+            // check if the user is asking for help by raising the help flag
+            if raised == true && help::FLAG == self.known_args.last().unwrap().as_flag_ref().get_name_ref() {
+                self.asking_for_help = true;
             }
+            // return the number of times the flag was raised
+            Ok(occurences.len())
+        }
+    }
+
+    /// Queries for the number of times a flag was raised up until `n` times.
+    /// 
+    /// Errors if the flag has an attached value. Returning a zero indicates the flag was never raised.
+    pub fn check_flag_n<'a>(&mut self, f: Flag<'c>, n: usize) -> Result<usize, CliError<'c>> {
+        let occurences = self.check_flag_all(f)?;
+        // verify the size of the vector does not exceed `n`
+        match occurences <= n {
+            true => Ok(occurences),
+            false => Err(CliError::ExceedingMaxCount(n, occurences, self.known_args.pop().unwrap())),
         }
     }
 
@@ -1052,5 +1079,51 @@ mod test {
             vec!["orbit", "command", "--rate", "10", "--rate", "4", "--rate", "3"]
         ));
         assert_eq!(cli.check_option_n::<u8>(Optional::new("rate"), 2).is_err(), true);
+    }
+
+    #[test]
+    fn check_flag_n() {
+        let mut cli = Cli::new().tokenize(args(
+            vec!["orbit"]
+        ));
+        assert_eq!(cli.check_flag_n(Flag::new("debug"), 4).unwrap(), 0);
+
+        let mut cli = Cli::new().tokenize(args(
+            vec!["orbit", "--debug"]
+        ));
+        assert_eq!(cli.check_flag_n(Flag::new("debug"), 1).unwrap(), 1);
+
+        let mut cli = Cli::new().tokenize(args(
+            vec!["orbit", "--debug", "--debug"]
+        ));
+        assert_eq!(cli.check_flag_n(Flag::new("debug"), 3).unwrap(), 2);
+
+        let mut cli = Cli::new().tokenize(args(
+            vec!["orbit", "--debug", "--debug", "--debug"]
+        ));
+        assert_eq!(cli.check_flag_n(Flag::new("debug"), 3).unwrap(), 3);
+
+        let mut cli = Cli::new().tokenize(args(
+            vec!["orbit", "--debug", "--debug", "--debug", "--debug"]
+        ));
+        assert_eq!(cli.check_flag_n(Flag::new("debug"), 3).is_err(), true);
+    }
+
+    #[test]
+    fn check_flag_all() {
+        let mut cli = Cli::new().tokenize(args(
+            vec!["orbit"]
+        ));
+        assert_eq!(cli.check_flag_all(Flag::new("debug")).unwrap(), 0);
+
+        let mut cli = Cli::new().tokenize(args(
+            vec!["orbit", "--debug", "--debug", "--debug"]
+        ));
+        assert_eq!(cli.check_flag_all(Flag::new("debug")).unwrap(), 3);
+
+        let mut cli = Cli::new().tokenize(args(
+            vec!["orbit", "--debug", "--debug", "--debug=1"]
+        ));
+        assert_eq!(cli.check_flag_all(Flag::new("debug")).is_err(), true);
     }
 }
