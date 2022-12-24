@@ -13,11 +13,6 @@ mod symbol {
     pub const FLAG: &str = "--";
 }
 
-mod help {
-    pub const FLAG: &str = "help";
-    pub const SWITCH: char = 'h';
-}
-
 #[derive(Debug, Eq, Hash, PartialEq)]
 enum Tag<T: AsRef<str>> {
     Switch(T),
@@ -32,25 +27,6 @@ impl<T: AsRef<str>> Tag<T> {
         }
     }
 }
-
-// impl<T: AsRef<str>> Into<String> for Tag<T> {
-//     fn into(self) -> String {
-//         match self {
-//             Self::Flag(s) => s.to_owned(),
-//             Self::Switch(s) => s,
-//         }
-//     }
-// }
-
-// impl<T: AsRef<str>> AsRef<String> for Tag<T> {
-//     fn as_ref(&self) -> &String {
-//         match self {
-//             Self::Flag(s) => s.,
-//             Self::Switch(s) => s,
-//         }
-//     }
-// }
-
 
 #[derive(Debug, PartialEq)]
 enum Token {
@@ -182,8 +158,8 @@ impl<'c> Cli<'c> {
     pub fn help(&mut self, help: Help<'c>) -> Result<(), CliError<'c>>  {
         self.help = Some(help);
         // check for flag if not already raised
-        if self.asking_for_help == false {
-            self.asking_for_help = self.check_flag(Flag::new(help::FLAG).switch(help::SWITCH))?;
+        if self.asking_for_help == false && self.is_help_enabled() == true {
+            self.asking_for_help = self.check_flag(self.help.as_ref().unwrap().get_flag().clone())?;
         }
         Ok(())
     }
@@ -202,7 +178,7 @@ impl<'c> Cli<'c> {
     /// help.
     fn prioritize_help(&self) -> Result<(), CliError<'c>> {
         if self.asking_for_help == true && self.is_help_enabled() == true {
-            Err(CliError::Help(self.help.as_ref().unwrap_or(&Help::new()).clone()))
+            Err(CliError::Help(self.help.clone()))
         } else {
             Ok(())
         }
@@ -270,7 +246,7 @@ impl<'c> Cli<'c> {
             if let Some((prefix, key, pos)) = ooc_arg {
                 if pos < i {
                     self.prioritize_help()?;
-                    return Err(CliError::OutOfContextArgSuggest(format!("{}{}", prefix, key), s, self.is_help_enabled()))
+                    return Err(CliError::OutOfContextArgSuggest(format!("{}{}", prefix, key), s, self.help.clone()))
                 } 
             }
             Ok(s)
@@ -281,7 +257,7 @@ impl<'c> Cli<'c> {
                 Err(CliError::SuggestSubcommand(s, w.to_string()))
             } else {
                 self.prioritize_help()?;
-                Err(CliError::UnknownSubcommand(self.known_args.pop().expect("requires positional argument"), s, self.is_help_enabled()))
+                Err(CliError::UnknownSubcommand(self.known_args.pop().expect("requires positional argument"), s, self.help.clone()))
             }
         }
     }
@@ -299,7 +275,7 @@ impl<'c> Cli<'c> {
                     Err(e) => {
                         self.prioritize_help()?;
                         self.prioritize_suggestion()?;
-                        Err(CliError::BadType(self.known_args.pop().unwrap(), s, e.to_string(), self.is_help_enabled()))
+                        Err(CliError::BadType(self.known_args.pop().unwrap(), s, e.to_string(), self.help.clone()))
                     }
                 }
             },
@@ -317,7 +293,7 @@ impl<'c> Cli<'c> {
         } else {
             self.prioritize_help()?;
             self.is_empty()?;
-            Err(CliError::MissingPositional(self.known_args.pop().unwrap(), self.help.as_ref().unwrap_or(&Help::new()).clone(), self.is_help_enabled()))
+            Err(CliError::MissingPositional(self.known_args.pop().unwrap(), self.help.clone()))
         }
     }
 
@@ -370,18 +346,18 @@ impl<'c> Cli<'c> {
                         Ok(r) => Ok(Some(r)),
                         Err(e) => {
                             self.prioritize_help()?;
-                            Err(CliError::BadType(self.known_args.pop().unwrap(), s, e.to_string(), self.is_help_enabled()))
+                            Err(CliError::BadType(self.known_args.pop().unwrap(), s, e.to_string(), self.help.clone()))
                         }
                     }
                 } else {
                     self.prioritize_help()?;
-                    Err(CliError::ExpectingValue(self.known_args.pop().unwrap(), self.is_help_enabled()))
+                    Err(CliError::ExpectingValue(self.known_args.pop().unwrap(), self.help.clone()))
                 }
             },
             0 => Ok(None),
             _ => {
                 self.prioritize_help()?;
-                Err(CliError::DuplicateOptions(self.known_args.pop().unwrap(), self.is_help_enabled()))
+                Err(CliError::DuplicateOptions(self.known_args.pop().unwrap(), self.help.clone()))
             }
         }
     }
@@ -431,12 +407,12 @@ impl<'c> Cli<'c> {
                     Ok(r) => transform.push(r),
                     Err(e) => {
                         self.prioritize_help()?;
-                        return Err(CliError::BadType(self.known_args.pop().unwrap(), s, e.to_string(), self.is_help_enabled()))
+                        return Err(CliError::BadType(self.known_args.pop().unwrap(), s, e.to_string(), self.help.clone()))
                     }
                 }
             } else {
                 self.prioritize_help()?;
-                return Err(CliError::ExpectingValue(self.known_args.pop().unwrap(), self.is_help_enabled()))
+                return Err(CliError::ExpectingValue(self.known_args.pop().unwrap(), self.help.clone()))
             }
         }
         Ok(Some(transform))
@@ -450,7 +426,7 @@ impl<'c> Cli<'c> {
         match occurences > 1 {
             true => {
                 self.prioritize_help()?;
-                Err(CliError::DuplicateOptions(self.known_args.pop().unwrap(), self.is_help_enabled()))
+                Err(CliError::DuplicateOptions(self.known_args.pop().unwrap(), self.help.clone()))
             },
             // the flag was either raised once or not at all
             false => Ok(occurences == 1),
@@ -476,8 +452,10 @@ impl<'c> Cli<'c> {
         } else {
             let raised = occurences.len() != 0;
             // check if the user is asking for help by raising the help flag
-            if raised == true && help::FLAG == self.known_args.last().unwrap().as_flag_ref().get_name_ref() {
-                self.asking_for_help = true;
+            if let Some(hp) = &self.help {
+                if raised == true && hp.get_flag().get_name_ref() == self.known_args.last().unwrap().as_flag_ref().get_name_ref() {
+                    self.asking_for_help = true;
+                }
             }
             // return the number of times the flag was raised
             Ok(occurences.len())
@@ -562,15 +540,15 @@ impl<'c> Cli<'c> {
         self.prioritize_help()?;
         // check if map is empty, and return the minimum found index.
         if let Some((prefix, key, _)) = self.capture_bad_flag(self.tokens.len())? {
-            Err(CliError::UnexpectedArg(format!("{}{}", prefix, key), self.is_help_enabled()))
+            Err(CliError::UnexpectedArg(format!("{}{}", prefix, key), self.help.clone()))
         // find first non-none token
         } else if let Some(t) = self.tokens.iter().find(|p| p.is_some()) {
             match t {
                 Some(Token::UnattachedArgument(_, s)) => {
-                    Err(CliError::UnexpectedArg(s.to_string(), self.is_help_enabled()))
+                    Err(CliError::UnexpectedArg(s.to_string(), self.help.clone()))
                 }
                 Some(Token::Terminator(_)) => {
-                    Err(CliError::UnexpectedArg(symbol::FLAG.to_string(), self.is_help_enabled()))
+                    Err(CliError::UnexpectedArg(symbol::FLAG.to_string(), self.help.clone()))
                 }
                 _ => panic!("no other tokens types should be left")
             }
@@ -1009,12 +987,12 @@ mod test {
         let mut cli = Cli::new().tokenize(args(
             vec!["orbit", "--upgrade", "-u"]
         ));
-        assert_eq!(cli.check_flag(Flag::new("upgrade").switch('u')), Err(CliError::DuplicateOptions(Arg::Flag(Flag::new("upgrade").switch('u')), false)));
+        assert_eq!(cli.check_flag(Flag::new("upgrade").switch('u')), Err(CliError::DuplicateOptions(Arg::Flag(Flag::new("upgrade").switch('u')), None)));
 
         let mut cli = Cli::new().tokenize(args(
             vec!["orbit", "--verbose", "--verbose", "--version=9"]
         ));
-        assert_eq!(cli.check_flag(Flag::new("verbose")), Err(CliError::DuplicateOptions(Arg::Flag(Flag::new("verbose")), false)));
+        assert_eq!(cli.check_flag(Flag::new("verbose")), Err(CliError::DuplicateOptions(Arg::Flag(Flag::new("verbose")), None)));
         assert_eq!(cli.check_flag(Flag::new("version")), Err(CliError::UnexpectedValue(Arg::Flag(Flag::new("version")), "9".to_string())));
     }
 
@@ -1038,7 +1016,7 @@ mod test {
         let mut cli = Cli::new().tokenize(args(
             vec!["orbit", "--flag", "--rate=9", "command", "-r", "14"]
         ));
-        assert_eq!(cli.check_option::<i32>(Optional::new("rate").switch('r')), Err(CliError::DuplicateOptions(Arg::Optional(Optional::new("rate").switch('r')), false)));
+        assert_eq!(cli.check_option::<i32>(Optional::new("rate").switch('r')), Err(CliError::DuplicateOptions(Arg::Optional(Optional::new("rate").switch('r')), None)));
 
         let mut cli = Cli::new().tokenize(args(
             vec!["orbit", "--flag", "-r", "14"]
@@ -1048,7 +1026,7 @@ mod test {
         let mut cli = Cli::new().tokenize(args(
             vec!["orbit", "--flag", "--rate", "--verbose"]
         ));
-        assert_eq!(cli.check_option::<i32>(Optional::new("rate")), Err(CliError::ExpectingValue(Arg::Optional(Optional::new("rate")), false)));
+        assert_eq!(cli.check_option::<i32>(Optional::new("rate")), Err(CliError::ExpectingValue(Arg::Optional(Optional::new("rate")), None)));
 
         let mut cli = Cli::new().tokenize(args(
             vec!["orbit", "--flag", "--rate", "five", "--verbose"]
@@ -1095,7 +1073,7 @@ mod test {
         let mut cli = Cli::new().tokenize(args(
             vec!["orbit", "--h"],
         ));
-        let locs = cli.take_flag_locs(help::FLAG);
+        let locs = cli.take_flag_locs("help");
         assert_eq!(locs.len(), 0);
         assert_eq!(cli.pull_flag(locs, false), vec![]);
     }

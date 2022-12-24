@@ -48,9 +48,16 @@ impl Runner<()> for Addrs {}
 
 impl FromCli for Addrs {
     fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, CliError<'c>> where Self: Sized {
+        // @note: experiment with T type for str reference
+        // let m = arg::Temp::new("hello");
+        // let t: Temp<String> = arg::Temp::new("lhs".yellow().to_string());
+
+        // println!("{}", t.get_name_ref());
+
         // set short help text in case of an error
         cli.help(Help::new()
             .quick_text(HELP)
+            .flag(Flag::new("help").switch('h'))
             .ref_usage(USAGE_LINE..USAGE_LINE+2))?;
         let radd = Addrs {
             verbose: cli.check_flag(Flag::new("verbose"))?,

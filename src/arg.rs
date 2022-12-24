@@ -28,13 +28,28 @@ impl<'a> Display for Arg<'a> {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct Temp<T: AsRef<str>> {
+    name: T
+}
+
+impl<T: AsRef<str>> Temp<T> {
+    pub fn new(s: T) -> Self {
+        Self { name: s, }
+    }
+
+    pub fn get_name_ref(&self) -> &T {
+        &self.name
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Positional<'a> {
     name: &'a str,
 }
 
 impl<'a> Positional<'a> {
     pub fn new(s: &'a str) -> Self {
-        Positional { name: s, }
+        Self { name: s, }
     }
 }
 
@@ -44,7 +59,7 @@ impl<'a> Display for Positional<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Flag<'a> {
     name: &'a str,
     switch: Option<char>,
@@ -52,7 +67,7 @@ pub struct Flag<'a> {
 
 impl<'a> Flag<'a> {
     pub fn new(s: &'a str) -> Self {
-        Flag { name: s, switch: None, }
+        Self { name: s, switch: None, }
     }
 
     pub fn switch(mut self, c: char) -> Self {
@@ -83,7 +98,7 @@ pub struct Optional<'a> {
 
 impl<'a> Optional<'a> {
     pub fn new(s: &'a str) -> Self {
-        Optional { option: Flag::new(s), value: Positional::new(s), }
+        Self { option: Flag::new(s), value: Positional::new(s), }
     }
 
     pub fn value(mut self, s: &'a str) -> Self {

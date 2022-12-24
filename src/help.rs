@@ -1,7 +1,14 @@
 use std::ops::Range;
+use crate::arg::Flag;
+
+mod tag {
+    pub const FLAG: &str = "help";
+    pub const SWITCH: char = 'h';
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Help<'c> {
+    arg: Flag<'c>,
     summary: Option<&'c str>,
     usage: Option<&'c str>,
     quick_text: &'c str,
@@ -11,6 +18,7 @@ pub struct Help<'c> {
 impl<'c> Help<'c> {
     pub fn new() -> Self {
         Self {
+            arg: Flag::new(tag::FLAG).switch(tag::SWITCH),
             summary: None,
             usage: None,
             quick_text: "",
@@ -23,6 +31,11 @@ impl<'c> Help<'c> {
         self
     }
 
+    pub fn flag(mut self, f: Flag<'c>) -> Self {
+        self.arg = f;
+        self
+    }
+
     pub fn quick_text(mut self, t: &'c str) -> Self {
         self.quick_text = t;
         self
@@ -31,6 +44,10 @@ impl<'c> Help<'c> {
     pub fn usage(mut self, t: &'c str) -> Self {
         self.usage = Some(t);
         self
+    }
+
+    pub fn get_flag(&self) -> &Flag<'c> {
+        &self.arg
     }
 
     pub fn get_quick_text(&self) -> &'c str {
