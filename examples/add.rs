@@ -1,5 +1,6 @@
 use cliprs::command::{FromCli, Command, Runner};
 use cliprs::cli::Cli;
+use cliprs::help::Help;
 use cliprs::errors::CliError;
 use cliprs::arg::*;
 use std::env::args;
@@ -48,7 +49,7 @@ impl Runner<()> for Addrs {}
 impl FromCli for Addrs {
     fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, CliError<'c>> where Self: Sized {
         // set short help text in case of an error
-        cli.help(HELP, Some(USAGE_LINE..USAGE_LINE+2))?;
+        cli.help(Help::new().quick_text(HELP).ref_usage(USAGE_LINE..USAGE_LINE+2))?;
         let radd = Addrs {
             verbose: cli.check_flag(Flag::new("verbose"))?,
             count: cli.check_option_n(Optional::new("count").switch('c'), 3)?.unwrap_or(vec![]),

@@ -2,6 +2,7 @@ pub mod arg;
 pub mod cli;
 pub mod command;
 pub mod errors;
+pub mod help;
 mod seqalin;
 
 #[cfg(test)]
@@ -38,7 +39,7 @@ mod tests {
         impl FromCli for Radd {
             fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, errors::CliError<'c>> where Self: Sized {
                 // set help text in case of an error
-                cli.help(HELP, Some(2..3))?;
+                cli.help(help::Help::new().quick_text(HELP))?;
                 let radd = Radd {
                     verbose: cli.check_flag(Flag::new("verbose"))?,
                     lhs: cli.require_positional(Positional::new("lhs"))?,

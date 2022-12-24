@@ -2,15 +2,26 @@ use crate::arg::Arg;
 use std::fmt::Display;
 use std::error::Error;
 use colored::*;
-use crate::cli::Help;
+use crate::help::Help;
 
-const BAD_CODE: u8 = 101;
-const OKAY_CODE: u8 = 0;
+mod exit_code {
+    pub const BAD: u8 = 101;
+    pub const OKAY: u8 = 0;
+}
+
+type Value = String;
+type ErrMessage = String;
+type Subcommand = String;
+type Suggestion = String;
+type PrevCommand = String;
+type MaxCount = usize;
+type CurCount = usize;
+type Argument = String;
 
 #[derive(Debug, PartialEq)]
 pub enum CliError<'a> {
     /// argument, value, error message 
-    BadType(Arg<'a>, String, String),
+    BadType(Arg<'a>, Value, ErrMessage),
     /// argument, help
     MissingPositional(Arg<'a>, Help<'a>),
     /// argument
@@ -18,31 +29,31 @@ pub enum CliError<'a> {
     /// argument
     ExpectingValue(Arg<'a>),
     /// argument, value
-    UnexpectedValue(Arg<'a>, String),
+    UnexpectedValue(Arg<'a>, Value),
     /// argument, subcommand
-    OutOfContextArgSuggest(String, String),
+    OutOfContextArgSuggest(Argument, Subcommand),
     /// argument
-    UnexpectedArg(String),
+    UnexpectedArg(Argument),
     /// argument, suggestion
-    SuggestArg(String, String),
+    SuggestArg(Argument, Suggestion),
     /// subcommand, suggestion
-    SuggestSubcommand(String, String),
+    SuggestSubcommand(Subcommand, Suggestion),
     /// argument, previous command
-    UnknownSubcommand(Arg<'a>, String),
+    UnknownSubcommand(Arg<'a>, PrevCommand),
     /// error message
-    BrokenRule(String),
+    BrokenRule(ErrMessage),
     /// quick help text
-    Help(&'a str),
+    Help(Help<'a>),
     /// n, incorrect size, argument
-    ExceedingMaxCount(usize, usize, Arg<'a>),
+    ExceedingMaxCount(MaxCount, CurCount, Arg<'a>),
 }
 
 impl<'a> CliError<'a> {
     /// Returns `OKAY_CODE` for help error and `BAD_CODE` otherwise.
     pub fn code(&self) -> u8 {
         match &self {
-            Self::Help(_) => OKAY_CODE,
-            _ => BAD_CODE
+            Self::Help(_) => exit_code::OKAY,
+            _ => exit_code::BAD
         }
     }
 
@@ -71,27 +82,12 @@ impl<'a> Display for CliError<'a> {
         // body
         match self {
             Self::ExceedingMaxCount(n, s, o) => write!(f, "option '{}' was requested {} times, but cannot exceed {}", o, s, n),
-            Self::Help(h) => write!(f, "{}", h),
+            Self::Help(h) => write!(f, "{}", h.get_quick_text()),
             Self::SuggestArg(a, sug) => write!(f, "unknown argument '{}'\n\nDid you mean {}?", a.yellow(), sug.green()),
             Self::SuggestSubcommand(a, sug) => write!(f, "unknown subcommand '{}'\n\nDid you mean {}?", a.yellow(), sug.green()),
             Self::OutOfContextArgSuggest(o, cmd) => write!(f, "argument '{}' is unknown, or invalid in the current context\n\nMaybe move it after '{}'?", o.yellow(), cmd.green()),
             Self::BadType(a, v, e) => write!(f, "argument '{}' did not process '{}' due to {}", a.to_string().yellow(), v.blue(), e),
-            Self::MissingPositional(p, help) => {
-                // detect the usage statement to print from command's short help text
-                let usage = match help.usage_at() { 
-                    None => String::new(),
-                    Some(i) =>  {
-                        let mut content = String::from("\n");
-                        let mut lines = help.info().split_terminator('\n').skip(i.start);
-                        for _ in 0..i.end-i.start {
-                            content.push('\n');
-                            content.push_str(lines.next().expect("usage directive range is out of bounds"));
-                        }
-                        content
-                    }
-                };
-                write!(f, "missing required argument '{}'{}", p, usage)
-            },
+            Self::MissingPositional(p, help) => write!(f, "missing required argument '{}'\n\n{}", p, help.get_usage().unwrap_or("")),
             Self::DuplicateOptions(o) => write!(f, "option '{}' was requested more than once, but can only be supplied once", o.to_string().yellow()),
             Self::ExpectingValue(x) => write!(f, "option '{}' expects a value but none was supplied", x.to_string().yellow()),
             Self::UnexpectedValue(x, s) => write!(f, "flag '{}' cannot accept values but one was supplied \"{}\"", x.to_string().yellow(), s),

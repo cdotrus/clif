@@ -22,7 +22,7 @@ pub trait Runner<T>: Command<T> + FromCli + Debug {}
 
 #[cfg(test)]
 mod test {
-    use crate::arg::*;
+    use crate::{arg::*, help::Help};
     use super::*;
 
     /// Helper test fn to write vec of &str as iterator for Cli parameter.
@@ -59,7 +59,7 @@ mod test {
 
     impl FromCli for Add {
         fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self,  CliError<'c>> {
-            cli.help("    add <lhs> <rhs> [--verbose]", Some(0..0))?;
+            cli.help(Help::new().quick_text("    add <lhs> <rhs> [--verbose]").ref_usage(0..0))?;
             // the ability to "learn options" beforehand is possible, or can be skipped
             // "learn options" here (take in known args (as ref?))
             Ok(Add {

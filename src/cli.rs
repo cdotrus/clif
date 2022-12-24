@@ -1,11 +1,11 @@
 use std::collections::HashMap;
-use std::ops::Range;
 use crate::errors::CliError;
 use crate::arg::*;
 use std::str::FromStr;
 use crate::command::FromCli;
 use crate::seqalin;
 use crate::seqalin::Cost;
+use crate::help::Help;
 
 mod symbol {
     // series of characters to denote flags and switches
@@ -48,23 +48,6 @@ impl Token {
             Self::Terminator(i) => i,
             Self::Ignore(i, _) => i,
         }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct Help<'c>(&'c str, Option<Range<usize>>);
-
-impl<'c> Help<'c> {
-    fn new() -> Self {
-        Self("", None)
-    }
-
-    pub fn info(&self) -> &str {
-        &self.0
-    }
-
-    pub fn usage_at(&self) -> Option<&Range<usize>> {
-        self.1.as_ref()
     }
 }
 
@@ -163,8 +146,8 @@ impl<'c> Cli<'c> {
     /// 
     /// If the help text has a line describing overall usage, you can specify it with `usage_line`.
     /// This value the 0-indexed line to print when a missing positional error occurs.
-    pub fn help(&mut self, text: &'c str, usage_line: Option<Range<usize>>) -> Result<(), CliError<'c>>  {
-        self.help = Some(Help(text, usage_line));
+    pub fn help(&mut self, help: Help<'c>) -> Result<(), CliError<'c>>  {
+        self.help = Some(help);
         // check for flag if not already raised
         if self.asking_for_help == false {
             self.asking_for_help = self.check_flag(Flag::new(help::FLAG).switch(help::SWITCH))?;
@@ -176,7 +159,7 @@ impl<'c> Cli<'c> {
     /// help.
     fn prioritize_help(&self) -> Result<(), CliError<'c>> {
         if self.asking_for_help == true && self.help.is_some() {
-            Err(CliError::Help(self.help.as_ref().unwrap_or(&Help::new()).0))
+            Err(CliError::Help(self.help.as_ref().unwrap_or(&Help::new()).clone()))
         } else {
             Ok(())
         }
