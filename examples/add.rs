@@ -4,6 +4,7 @@ use cliprs::help::Help;
 use cliprs::errors::CliError;
 use cliprs::arg::*;
 use std::env::args;
+use colored::*;
 
 fn main() {
     std::process::exit(go() as i32)
@@ -23,7 +24,13 @@ fn go() -> u8 {
             app.exec(&()) 
         },
         // report cli error
-        Err(err) => err.explain()
+        Err(err) => {
+            match err.as_quick_help() {
+                Some(text) => println!("{}", text),
+                None => eprintln!("{} {}", "error:".red().bold(), err),
+            }
+            err.code()
+        }
     }
 }
 

@@ -1,5 +1,11 @@
 use std::fmt::Display;
 
+mod symbol {
+    pub const FLAG: &str = "--";
+    pub const POS_BRACKET_L: &str = "<";
+    pub const POS_BRACKER_R: &str = ">";
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Arg<'a> {
     Flag(Flag<'a>),
@@ -55,7 +61,7 @@ impl<'a> Positional<'a> {
 
 impl<'a> Display for Positional<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> { 
-        write!(f, "<{}>", self.name)
+        write!(f, "{}{}{}", symbol::POS_BRACKET_L, self.name, symbol::POS_BRACKER_R)
     }
 }
 
@@ -86,7 +92,7 @@ impl<'a> Flag<'a> {
 
 impl<'a> Display for Flag<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> { 
-        write!(f, "--{}", self.name)
+        write!(f, "{}{}", symbol::FLAG, self.name)
     }
 }
 

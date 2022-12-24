@@ -58,16 +58,14 @@ impl<'a> CliError<'a> {
         }
     }
 
-    /// Displays the cli error to the console and returns its respective error
-    /// code.
-    pub fn explain(&self) -> u8 {
+    /// Casts the error to the quick help message if the error is for requesting help.
+    pub fn as_quick_help(&self) -> Option<&str> {
         match &self {
-            // handle help information returning a zero exit code
-            Self::Help(_) => println!("{}", self.to_string()),
-            // display the cli parsing error message
-            _ => eprintln!("{}", self.to_string()),
+            Self::Help(h) => {
+                Some(h.as_ref()?.get_quick_text())
+            },
+            _ => None
         }
-        self.code()
     }
 }
 
@@ -75,11 +73,6 @@ impl<'a> Error for CliError<'a> {}
 
 impl<'a> Display for CliError<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> { 
-        // header
-        match self {
-            Self::Help(_) => (),
-            _ => write!(f, "{}", "error: ".red().bold())?
-        };
         // body
         match self {
             Self::ExceedingMaxCount(n, s, o) => write!(f, "option '{}' was requested {} times, but cannot exceed {}", o, s, n),

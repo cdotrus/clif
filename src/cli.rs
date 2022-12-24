@@ -10,6 +10,7 @@ use crate::help::Help;
 mod symbol {
     // series of characters to denote flags and switches
     pub const SWITCH: &str = "-";
+    // @note: tokenizing depends on flag having the first character be the switch character
     pub const FLAG: &str = "--";
 }
 
@@ -97,7 +98,7 @@ impl<'c> Cli<'c> {
             if terminated == true {
                 tokens.push(Some(Token::Ignore(i, arg)));
             // handle an option
-            } else if arg.starts_with(symbol::SWITCH) {
+            } else if arg.starts_with(symbol::SWITCH) == true {
                 // try to separate from '=' sign
                 let mut value: Option<String> = None;
                 let mut option: Option<String> = None;
@@ -112,7 +113,7 @@ impl<'c> Cli<'c> {
                     arg = opt;
                 }
                 // handle long flag signal
-                if arg.starts_with(symbol::FLAG) {
+                if arg.starts_with(symbol::FLAG) == true {
                     arg.replace_range(0..=1, "");
                     // caught the terminator (purely "--")
                     if arg.is_empty() == true {
@@ -319,7 +320,7 @@ impl<'c> Cli<'c> {
             match self.tokens.get(*f.1.first().unwrap()).unwrap() {
                 Some(Token::Flag(_)) => {
                     if let Some(word) = if self.threshold > 0 { seqalin::sel_min_edit_str(f.0, &bank, self.threshold) } else { None } {
-                        Some(CliError::SuggestArg(format!("--{}", f.0), format!("--{}", word)))
+                        Some(CliError::SuggestArg(format!("{}{}", symbol::FLAG, f.0), format!("{}{}", symbol::FLAG, word)))
                     } else {
                         None
                     }
@@ -529,7 +530,7 @@ impl<'c> Cli<'c> {
                         // try to match it with a valid flag from word bank
                         let bank  = self.known_args_as_flag_names();
                         if let Some(s) = if self.threshold > 0 { seqalin::sel_min_edit_str(key, &bank, self.threshold) } else { None } {
-                            return Err(CliError::SuggestArg(format!("--{}", key), format!("--{}", s)));
+                            return Err(CliError::SuggestArg(format!("{}{}", symbol::FLAG, key), format!("{}{}", symbol::FLAG, s)));
                         }
                         symbol::FLAG
                     },
