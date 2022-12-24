@@ -18,6 +18,39 @@ mod help {
     pub const SWITCH: char = 'h';
 }
 
+#[derive(Debug, Eq, Hash, PartialEq)]
+enum Tag<T: AsRef<str>> {
+    Switch(T),
+    Flag(T),
+}
+
+impl<T: AsRef<str>> Tag<T> {
+    fn as_ref(&self) -> &T {
+        match self {
+            Self::Flag(s) => s,
+            Self::Switch(s) => s,
+        }
+    }
+}
+
+// impl<T: AsRef<str>> Into<String> for Tag<T> {
+//     fn into(self) -> String {
+//         match self {
+//             Self::Flag(s) => s.to_owned(),
+//             Self::Switch(s) => s,
+//         }
+//     }
+// }
+
+// impl<T: AsRef<str>> AsRef<String> for Tag<T> {
+//     fn as_ref(&self) -> &String {
+//         match self {
+//             Self::Flag(s) => s.,
+//             Self::Switch(s) => s,
+//         }
+//     }
+// }
+
 
 #[derive(Debug, PartialEq)]
 enum Token {
@@ -54,7 +87,7 @@ impl Token {
 #[derive(Debug, PartialEq)]
 pub struct Cli<'c> {
     tokens: Vec<Option<Token>>,
-    opt_store: HashMap<String, Vec<usize>>,
+    opt_store: HashMap<Tag<String>, Vec<usize>>,
     known_args: Vec<Arg<'c>>,
     help: Option<Help<'c>>,
     asking_for_help: bool,
@@ -109,7 +142,7 @@ impl<'c> Cli<'c> {
                         terminated = true;
                     // caught a 'long option' flag
                     } else {
-                        store.entry(arg).or_insert(Vec::new()).push(tokens.len());
+                        store.entry(Tag::Flag(arg)).or_insert(Vec::new()).push(tokens.len());
                         tokens.push(Some(Token::Flag(i)));
                     }
                 // handle short flag signal
@@ -117,7 +150,7 @@ impl<'c> Cli<'c> {
                     let mut arg = arg.chars().skip(1);
                     // split switches into individual components
                     while let Some(c) = arg.next() {
-                        store.entry(c.to_string()).or_insert(Vec::new()).push(tokens.len());
+                        store.entry(Tag::Switch(c.to_string())).or_insert(Vec::new()).push(tokens.len());
                         tokens.push(Some(Token::Switch(i, c)));
                     }
                 }
@@ -155,10 +188,20 @@ impl<'c> Cli<'c> {
         Ok(())
     }
 
+    /// Checks if help is enabled and is some value.
+    pub fn is_help_enabled(&self) -> bool {
+        self.help.is_some()
+    }
+
+    /// Removes the current help text set for the command-line argument parser.
+    pub fn disable_help(&mut self) -> () {
+        self.help = None;
+    }
+
     /// Checks if help has been raised and will return its own error for displaying
     /// help.
     fn prioritize_help(&self) -> Result<(), CliError<'c>> {
-        if self.asking_for_help == true && self.help.is_some() {
+        if self.asking_for_help == true && self.is_help_enabled() == true {
             Err(CliError::Help(self.help.as_ref().unwrap_or(&Help::new()).clone()))
         } else {
             Ok(())
@@ -227,7 +270,7 @@ impl<'c> Cli<'c> {
             if let Some((prefix, key, pos)) = ooc_arg {
                 if pos < i {
                     self.prioritize_help()?;
-                    return Err(CliError::OutOfContextArgSuggest(format!("{}{}", prefix, key), s))
+                    return Err(CliError::OutOfContextArgSuggest(format!("{}{}", prefix, key), s, self.is_help_enabled()))
                 } 
             }
             Ok(s)
@@ -238,7 +281,7 @@ impl<'c> Cli<'c> {
                 Err(CliError::SuggestSubcommand(s, w.to_string()))
             } else {
                 self.prioritize_help()?;
-                Err(CliError::UnknownSubcommand(self.known_args.pop().expect("requires positional argument"), s))
+                Err(CliError::UnknownSubcommand(self.known_args.pop().expect("requires positional argument"), s, self.is_help_enabled()))
             }
         }
     }
@@ -256,7 +299,7 @@ impl<'c> Cli<'c> {
                     Err(e) => {
                         self.prioritize_help()?;
                         self.prioritize_suggestion()?;
-                        Err(CliError::BadType(self.known_args.pop().unwrap(), s, e.to_string()))
+                        Err(CliError::BadType(self.known_args.pop().unwrap(), s, e.to_string(), self.is_help_enabled()))
                     }
                 }
             },
@@ -274,7 +317,7 @@ impl<'c> Cli<'c> {
         } else {
             self.prioritize_help()?;
             self.is_empty()?;
-            Err(CliError::MissingPositional(self.known_args.pop().unwrap(), self.help.as_ref().unwrap_or(&Help::new()).clone()))
+            Err(CliError::MissingPositional(self.known_args.pop().unwrap(), self.help.as_ref().unwrap_or(&Help::new()).clone(), self.is_help_enabled()))
         }
     }
 
@@ -282,7 +325,7 @@ impl<'c> Cli<'c> {
     /// 
     /// Returns ok if cannot make a suggestion.
     fn prioritize_suggestion(&self) -> Result<(), CliError<'c>> {
-        let mut kv: Vec<(&String, &Vec<usize>)> = self.opt_store.iter().collect();
+        let mut kv: Vec<(&String, &Vec<usize>)> = self.opt_store.iter().map(|s| (s.0.as_ref(), s.1)).collect::<Vec<(&String, &Vec<usize>)>>();
         kv.sort_by(|a, b| a.1.first().unwrap().cmp(b.1.first().unwrap()));
         let bank  = self.known_args_as_flag_names();
         let r = kv.iter().find_map(|f| {
@@ -327,18 +370,18 @@ impl<'c> Cli<'c> {
                         Ok(r) => Ok(Some(r)),
                         Err(e) => {
                             self.prioritize_help()?;
-                            Err(CliError::BadType(self.known_args.pop().unwrap(), s, e.to_string()))
+                            Err(CliError::BadType(self.known_args.pop().unwrap(), s, e.to_string(), self.is_help_enabled()))
                         }
                     }
                 } else {
                     self.prioritize_help()?;
-                    Err(CliError::ExpectingValue(self.known_args.pop().unwrap()))
+                    Err(CliError::ExpectingValue(self.known_args.pop().unwrap(), self.is_help_enabled()))
                 }
             },
             0 => Ok(None),
             _ => {
                 self.prioritize_help()?;
-                Err(CliError::DuplicateOptions(self.known_args.pop().unwrap()))
+                Err(CliError::DuplicateOptions(self.known_args.pop().unwrap(), self.is_help_enabled()))
             }
         }
     }
@@ -388,12 +431,12 @@ impl<'c> Cli<'c> {
                     Ok(r) => transform.push(r),
                     Err(e) => {
                         self.prioritize_help()?;
-                        return Err(CliError::BadType(self.known_args.pop().unwrap(), s, e.to_string()))
+                        return Err(CliError::BadType(self.known_args.pop().unwrap(), s, e.to_string(), self.is_help_enabled()))
                     }
                 }
             } else {
                 self.prioritize_help()?;
-                return Err(CliError::ExpectingValue(self.known_args.pop().unwrap()))
+                return Err(CliError::ExpectingValue(self.known_args.pop().unwrap(), self.is_help_enabled()))
             }
         }
         Ok(Some(transform))
@@ -407,7 +450,7 @@ impl<'c> Cli<'c> {
         match occurences > 1 {
             true => {
                 self.prioritize_help()?;
-                Err(CliError::DuplicateOptions(self.known_args.pop().unwrap()))
+                Err(CliError::DuplicateOptions(self.known_args.pop().unwrap(), self.is_help_enabled()))
             },
             // the flag was either raised once or not at all
             false => Ok(occurences == 1),
@@ -420,6 +463,7 @@ impl<'c> Cli<'c> {
     pub fn check_flag_all<'a>(&mut self, f: Flag<'c>) -> Result<usize, CliError<'c>> {
         // collect information on where the flag can be found
         let mut locs = self.take_flag_locs(f.get_name_ref());
+        // try to find the switch locations
         if let Some(c) = f.get_switch_ref() {
             locs.extend(self.take_switch_locs(c));
         };
@@ -518,15 +562,15 @@ impl<'c> Cli<'c> {
         self.prioritize_help()?;
         // check if map is empty, and return the minimum found index.
         if let Some((prefix, key, _)) = self.capture_bad_flag(self.tokens.len())? {
-            Err(CliError::UnexpectedArg(format!("{}{}", prefix, key)))
+            Err(CliError::UnexpectedArg(format!("{}{}", prefix, key), self.is_help_enabled()))
         // find first non-none token
         } else if let Some(t) = self.tokens.iter().find(|p| p.is_some()) {
             match t {
                 Some(Token::UnattachedArgument(_, s)) => {
-                    Err(CliError::UnexpectedArg(s.to_string()))
+                    Err(CliError::UnexpectedArg(s.to_string(), self.is_help_enabled()))
                 }
                 Some(Token::Terminator(_)) => {
-                    Err(CliError::UnexpectedArg(symbol::FLAG.to_string()))
+                    Err(CliError::UnexpectedArg(symbol::FLAG.to_string(), self.is_help_enabled()))
                 }
                 _ => panic!("no other tokens types should be left")
             }
@@ -596,7 +640,7 @@ impl<'c> Cli<'c> {
     ///
     /// Information about Option<Vec<T>> vs. empty Vec<T>: https://users.rust-lang.org/t/space-time-usage-to-construct-vec-t-vs-option-vec-t/35596/6
     fn take_flag_locs(&mut self, tag: &str) -> Vec<usize> {
-        self.opt_store.remove(tag).unwrap_or(vec![])
+        self.opt_store.remove(&Tag::Flag(tag.to_owned())).unwrap_or(vec![])
     }
 
     /// Returns all locations in the token stream where the switch identifier `c` is found.
@@ -604,7 +648,7 @@ impl<'c> Cli<'c> {
         // allocate &str to the stack and not the heap to get from store
         let mut arr = [0; 4];
         let tag = c.encode_utf8(&mut arr);
-        self.opt_store.remove(tag).unwrap_or(vec![])
+        self.opt_store.remove(&Tag::Switch(tag.to_owned())).unwrap_or(vec![])
     }
 }
 
@@ -862,16 +906,16 @@ mod test {
         let cli = Cli::new().tokenize(args(
             vec!["orbit", "--help", "-v", "new", "ip", "--lib", "--name=rary.gates", "--help", "-sci", symbol::FLAG, "--map", "synthesis", "-jto"]
         ));
-        let mut opt_store = HashMap::<String, Vec<usize>>::new();
+        let mut opt_store = HashMap::<Tag<String>, Vec<usize>>::new();
         // store long options
-        opt_store.insert("help".to_string(), vec![0, 7]);
-        opt_store.insert("lib".to_string(), vec![4]);
-        opt_store.insert("name".to_string(), vec![5]);
+        opt_store.insert(Tag::Flag("help".to_string()), vec![0, 7]);
+        opt_store.insert(Tag::Flag("lib".to_string()), vec![4]);
+        opt_store.insert(Tag::Flag("name".to_string()), vec![5]);
         // stores switches too
-        opt_store.insert("v".to_string(), vec![1]);
-        opt_store.insert("s".to_string(), vec![8]);
-        opt_store.insert("c".to_string(), vec![9]);
-        opt_store.insert("i".to_string(), vec![10]);
+        opt_store.insert(Tag::Switch("v".to_string()), vec![1]);
+        opt_store.insert(Tag::Switch("s".to_string()), vec![8]);
+        opt_store.insert(Tag::Switch("c".to_string()), vec![9]);
+        opt_store.insert(Tag::Switch("i".to_string()), vec![10]);
         assert_eq!(cli.opt_store, opt_store);
     }
 
@@ -965,12 +1009,12 @@ mod test {
         let mut cli = Cli::new().tokenize(args(
             vec!["orbit", "--upgrade", "-u"]
         ));
-        assert_eq!(cli.check_flag(Flag::new("upgrade").switch('u')), Err(CliError::DuplicateOptions(Arg::Flag(Flag::new("upgrade").switch('u')))));
+        assert_eq!(cli.check_flag(Flag::new("upgrade").switch('u')), Err(CliError::DuplicateOptions(Arg::Flag(Flag::new("upgrade").switch('u')), false)));
 
         let mut cli = Cli::new().tokenize(args(
             vec!["orbit", "--verbose", "--verbose", "--version=9"]
         ));
-        assert_eq!(cli.check_flag(Flag::new("verbose")), Err(CliError::DuplicateOptions(Arg::Flag(Flag::new("verbose")))));
+        assert_eq!(cli.check_flag(Flag::new("verbose")), Err(CliError::DuplicateOptions(Arg::Flag(Flag::new("verbose")), false)));
         assert_eq!(cli.check_flag(Flag::new("version")), Err(CliError::UnexpectedValue(Arg::Flag(Flag::new("version")), "9".to_string())));
     }
 
@@ -994,7 +1038,7 @@ mod test {
         let mut cli = Cli::new().tokenize(args(
             vec!["orbit", "--flag", "--rate=9", "command", "-r", "14"]
         ));
-        assert_eq!(cli.check_option::<i32>(Optional::new("rate").switch('r')), Err(CliError::DuplicateOptions(Arg::Optional(Optional::new("rate").switch('r')))));
+        assert_eq!(cli.check_option::<i32>(Optional::new("rate").switch('r')), Err(CliError::DuplicateOptions(Arg::Optional(Optional::new("rate").switch('r')), false)));
 
         let mut cli = Cli::new().tokenize(args(
             vec!["orbit", "--flag", "-r", "14"]
@@ -1004,7 +1048,7 @@ mod test {
         let mut cli = Cli::new().tokenize(args(
             vec!["orbit", "--flag", "--rate", "--verbose"]
         ));
-        assert_eq!(cli.check_option::<i32>(Optional::new("rate")), Err(CliError::ExpectingValue(Arg::Optional(Optional::new("rate")))));
+        assert_eq!(cli.check_option::<i32>(Optional::new("rate")), Err(CliError::ExpectingValue(Arg::Optional(Optional::new("rate")), false)));
 
         let mut cli = Cli::new().tokenize(args(
             vec!["orbit", "--flag", "--rate", "five", "--verbose"]
@@ -1044,6 +1088,16 @@ mod test {
     fn take_impossible_token_terminator_str() {
         let t = Token::Terminator(9);
         t.take_str();
+    }
+
+    #[test]
+    fn try_help_fail() {
+        let mut cli = Cli::new().tokenize(args(
+            vec!["orbit", "--h"],
+        ));
+        let locs = cli.take_flag_locs(help::FLAG);
+        assert_eq!(locs.len(), 0);
+        assert_eq!(cli.pull_flag(locs, false), vec![]);
     }
 
     #[test]
