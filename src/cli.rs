@@ -121,7 +121,7 @@ impl<'c> Cli<'c> {
                 if arg.starts_with(symbol::FLAG) {
                     arg.replace_range(0..=1, "");
                     // caught the terminator (purely "--")
-                    if arg.is_empty() {
+                    if arg.is_empty() == true {
                         tokens.push(Some(Token::Terminator(i)));
                         terminated = true;
                     // caught a 'long option' flag
@@ -393,7 +393,7 @@ impl<'c> Cli<'c> {
         self.known_args.push(Arg::Optional(o));
         // pull values from where the option flags were found (including switch)
         let values = self.pull_flag(locs, true);
-        if values.is_empty() {
+        if values.is_empty() == true {
             return Ok(None)
         }
         // try to convert each value into the type T
@@ -552,25 +552,25 @@ impl<'c> Cli<'c> {
         }
     }
 
-    /// Grabs the flag/switch from the token stream, and collects. If an argument were to follow
-    /// it will be in the vector.
-    fn pull_flag(&mut self, m: Vec<usize>, with_uarg: bool) -> Vec<Option<String>> {
-        // remove all flag instances located at each index in `m`
-        m.iter().map(|f| {
+    /// Grabs the flag/switch from the token stream, and collects. 
+    /// 
+    /// If an argument were to follow it will be in the vector.
+    fn pull_flag(&mut self, locations: Vec<usize>, with_uarg: bool) -> Vec<Option<String>> {
+        // remove all flag instances located at each index `i` in the vector `locations`
+        locations.iter().map(|i| {
             // remove the flag instance from the token stream
-            self.tokens.get_mut(*f).unwrap().take();
+            self.tokens.get_mut(*i).unwrap().take();
             // check the next position for a value
-            if let Some(t_next) = self.tokens.get_mut(*f+1) {
+            if let Some(t_next) = self.tokens.get_mut(*i+1) {
                 match t_next {
                     Some(Token::AttachedArgument(_, _)) => {
                         Some(t_next.take().unwrap().take_str())
                     }
                     Some(Token::UnattachedArgument(_, _)) => {
                         // do not take unattached arguments unless told by parameter
-                        if with_uarg == false {
-                            None
-                        } else {
-                            Some(t_next.take().unwrap().take_str())
+                        match with_uarg {
+                            true => Some(t_next.take().unwrap().take_str()),
+                            false => None, 
                         }
                     }
                     _ => None,
@@ -586,42 +586,42 @@ impl<'c> Cli<'c> {
     /// Errors if an `AttachedArg` is found (could only be immediately after terminator)
     /// after the terminator.
     pub fn check_remainder(&mut self) -> Result<Vec<String>, CliError<'c>> {
-        self.tokens.iter_mut().skip_while(|p| {
-            match p {
+        self.tokens.iter_mut().skip_while(|tkn| {
+            match tkn {
                 Some(Token::Terminator(_)) => false,
                 _ => true,
             }
-        }).filter_map(|f| {
-            match f {
+        }).filter_map(|tkn| {
+            match tkn {
                 // remove the terminator from the stream
                 Some(Token::Terminator(_)) => {
-                    f.take().unwrap();
+                    tkn.take().unwrap();
                     None
                 }
                 Some(Token::Ignore(_, _)) => {
-                    Some(Ok(f.take().unwrap().take_str()))
+                    Some(Ok(tkn.take().unwrap().take_str()))
                 }
                 Some(Token::AttachedArgument(_, _)) => {
-                    Some(Err(CliError::UnexpectedValue(Arg::Flag(Flag::new("")), f.take().unwrap().take_str())))
+                    Some(Err(CliError::UnexpectedValue(Arg::Flag(Flag::new("")), tkn.take().unwrap().take_str())))
                 }
-                _ => panic!("no other tokens should exist beyond terminator {:?}", f)
+                _ => panic!("no other tokens should exist beyond terminator {:?}", tkn)
             }
         }).collect()
     }
 
-    /// Returns all locations in the token stream where the flag is found.
+    /// Returns all locations in the token stream where the flag identifier `tag` is found.
     ///
     /// Information about Option<Vec<T>> vs. empty Vec<T>: https://users.rust-lang.org/t/space-time-usage-to-construct-vec-t-vs-option-vec-t/35596/6
-    fn take_flag_locs(&mut self, s: &str) -> Vec<usize> {
-        self.opt_store.remove(s).unwrap_or(vec![])
+    fn take_flag_locs(&mut self, tag: &str) -> Vec<usize> {
+        self.opt_store.remove(tag).unwrap_or(vec![])
     }
 
-    /// Returns all locations in the token stream where the switch is found.
+    /// Returns all locations in the token stream where the switch identifier `c` is found.
     fn take_switch_locs(&mut self, c: &char) -> Vec<usize> {
         // allocate &str to the stack and not the heap to get from store
-        let mut tmp = [0; 4];
-        let m = c.encode_utf8(&mut tmp);
-        self.opt_store.remove(m).unwrap_or(vec![])
+        let mut arr = [0; 4];
+        let tag = c.encode_utf8(&mut arr);
+        self.opt_store.remove(tag).unwrap_or(vec![])
     }
 }
 
