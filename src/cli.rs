@@ -1,6 +1,6 @@
 use crate::arg::*;
 use crate::command::FromCli;
-use crate::errors::CliError;
+use crate::error::CliError;
 use crate::help::Help;
 use crate::seqalin;
 use crate::seqalin::Cost;

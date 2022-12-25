@@ -1,7 +1,7 @@
 use cliprs::arg::*;
 use cliprs::cli::Cli;
 use cliprs::command::{Command, FromCli, Runner};
-use cliprs::errors::CliError;
+use cliprs::error::CliError;
 use cliprs::help::Help;
 use colored::*;
 use std::env::args;
@@ -61,6 +61,16 @@ impl FromCli for Addrs {
         // let t: Temp<String> = arg::Temp::new("lhs".yellow().to_string());
 
         // println!("{}", t.get_name_ref());
+
+        if let Err(e) = std::fs::File::open("hello world") {
+            match e.kind() {
+                std::io::ErrorKind::NotFound => {
+                    println!("{}", "here");
+                },
+                _ => (),
+            }
+            eprintln!("{}", e);
+        }
 
         // set short help text in case of an error
         cli.help(

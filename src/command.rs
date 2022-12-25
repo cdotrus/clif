@@ -1,5 +1,5 @@
 use crate::cli::Cli;
-use crate::errors::CliError;
+use crate::error::CliError;
 use std::fmt::Debug;
 
 pub trait Command<T>: Debug {

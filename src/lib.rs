@@ -1,7 +1,7 @@
 pub mod arg;
 pub mod cli;
 pub mod command;
-pub mod errors;
+pub mod error;
 pub mod help;
 mod seqalin;
 
@@ -37,7 +37,7 @@ mod tests {
         impl Runner<()> for Radd {}
 
         impl FromCli for Radd {
-            fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, errors::CliError<'c>>
+            fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, error::CliError<'c>>
             where
                 Self: Sized,
             {
