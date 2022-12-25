@@ -70,6 +70,7 @@ pub struct Cli<'c> {
     known_args: Vec<Arg<'c>>,
     help: Option<Help<'c>>,
     asking_for_help: bool,
+    prioritize_help: bool,
     threshold: Cost,
 }
 
@@ -82,6 +83,7 @@ impl<'c> Cli<'c> {
             known_args: Vec::new(),
             help: None,
             asking_for_help: false,
+            prioritize_help: true,
             threshold: 0,
         }
     }
@@ -199,10 +201,29 @@ impl<'c> Cli<'c> {
         self.help = None;
     }
 
+    /// Downplays the help action to not become a priority error over other errors in the parsing.
+    ///
+    /// Help is prioritized by default.
+    pub fn downplay_help(mut self) -> Self {
+        self.prioritize_help = false;
+        self
+    }
+
+    /// Prioritizes the help action over other errors during parsing.
+    ///
+    /// This is enabled by default.
+    pub fn emphasize_help(mut self) -> Self {
+        self.prioritize_help = true;
+        self
+    }
+
     /// Checks if help has been raised and will return its own error for displaying
     /// help.
     fn prioritize_help(&self) -> Result<(), CliError<'c>> {
-        if self.asking_for_help == true && self.is_help_enabled() == true {
+        if self.prioritize_help == true
+            && self.asking_for_help == true
+            && self.is_help_enabled() == true
+        {
             Err(CliError::Help(self.help.clone()))
         } else {
             Ok(())

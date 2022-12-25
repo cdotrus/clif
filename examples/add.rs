@@ -13,7 +13,7 @@ fn main() {
 /// Glues the interface layer and backend logic for a smooth hand-off of data.
 fn go() -> u8 {
     // parse the command-line arguments
-    let mut cli = Cli::new().threshold(4).tokenize(args());
+    let mut cli = Cli::new().threshold(4).downplay_help().tokenize(args());
 
     match Addrs::from_cli(&mut cli) {
         // construct the application
