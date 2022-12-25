@@ -409,8 +409,8 @@ impl<'c> Cli<'c> {
         <T as FromStr>::Err: std::error::Error,
     {
         // collect information on where the flag can be found
-        let mut locs = self.take_flag_locs(o.get_flag_ref().get_name_ref());
-        if let Some(c) = o.get_flag_ref().get_switch_ref() {
+        let mut locs = self.take_flag_locs(o.get_flag().get_name());
+        if let Some(c) = o.get_flag().get_switch() {
             locs.extend(self.take_switch_locs(c));
         }
         self.known_args.push(Arg::Optional(o));
@@ -488,8 +488,8 @@ impl<'c> Cli<'c> {
         <T as FromStr>::Err: std::error::Error,
     {
         // collect information on where the flag can be found
-        let mut locs = self.take_flag_locs(o.get_flag_ref().get_name_ref());
-        if let Some(c) = o.get_flag_ref().get_switch_ref() {
+        let mut locs = self.take_flag_locs(o.get_flag().get_name());
+        if let Some(c) = o.get_flag().get_switch() {
             locs.extend(self.take_switch_locs(c));
         }
         self.known_args.push(Arg::Optional(o));
@@ -549,9 +549,9 @@ impl<'c> Cli<'c> {
     /// Errors if the flag has an attached value. Returning a zero indicates the flag was never raised.
     pub fn check_flag_all<'a>(&mut self, f: Flag<'c>) -> Result<usize, CliError<'c>> {
         // collect information on where the flag can be found
-        let mut locs = self.take_flag_locs(f.get_name_ref());
+        let mut locs = self.take_flag_locs(f.get_name());
         // try to find the switch locations
-        if let Some(c) = f.get_switch_ref() {
+        if let Some(c) = f.get_switch() {
             locs.extend(self.take_switch_locs(c));
         };
         self.known_args.push(Arg::Flag(f));
@@ -568,8 +568,14 @@ impl<'c> Cli<'c> {
             // check if the user is asking for help by raising the help flag
             if let Some(hp) = &self.help {
                 if raised == true
-                    && hp.get_flag().get_name_ref()
-                        == self.known_args.last().unwrap().as_flag_ref().get_name_ref()
+                    && hp.get_flag().get_name()
+                        == self
+                            .known_args
+                            .last()
+                            .unwrap()
+                            .as_flag()
+                            .unwrap()
+                            .get_name()
                 {
                     self.asking_for_help = true;
                 }
@@ -603,8 +609,8 @@ impl<'c> Cli<'c> {
         self.known_args
             .iter()
             .filter_map(|f| match f {
-                Arg::Flag(f) => Some(f.get_name_ref()),
-                Arg::Optional(o) => Some(o.get_flag_ref().get_name_ref()),
+                Arg::Flag(f) => Some(f.get_name()),
+                Arg::Optional(o) => Some(o.get_flag().get_name()),
                 _ => None,
             })
             .collect()

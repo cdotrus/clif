@@ -14,11 +14,11 @@ pub enum Arg<'a> {
 }
 
 impl<'a> Arg<'a> {
-    pub fn as_flag_ref(&self) -> &Flag {
+    pub fn as_flag(&self) -> Option<&Flag> {
         match self {
-            Arg::Flag(f) => f,
-            Arg::Optional(o) => o.get_flag_ref(),
-            Arg::Positional(_) => panic!("positional cannot be accessed as flag"),
+            Arg::Flag(f) => Some(f),
+            Arg::Optional(o) => Some(o.get_flag()),
+            Arg::Positional(_) => None,
         }
     }
 }
@@ -30,21 +30,6 @@ impl<'a> Display for Arg<'a> {
             Arg::Positional(a) => write!(f, "{}", a),
             Arg::Optional(a) => write!(f, "{}", a),
         }
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Temp<T: AsRef<str>> {
-    name: T,
-}
-
-impl<T: AsRef<str>> Temp<T> {
-    pub fn new(s: T) -> Self {
-        Self { name: s }
-    }
-
-    pub fn get_name_ref(&self) -> &T {
-        &self.name
     }
 }
 
@@ -90,11 +75,11 @@ impl<'a> Flag<'a> {
         self
     }
 
-    pub fn get_name_ref(&self) -> &str {
+    pub fn get_name(&self) -> &str {
         self.name
     }
 
-    pub fn get_switch_ref(&self) -> Option<&char> {
+    pub fn get_switch(&self) -> Option<&char> {
         self.switch.as_ref()
     }
 }
@@ -129,11 +114,11 @@ impl<'a> Optional<'a> {
         self
     }
 
-    pub fn get_flag_ref(&self) -> &Flag {
+    pub fn get_flag(&self) -> &Flag {
         &self.option
     }
 
-    pub fn _get_pos_ref(&self) -> &Positional {
+    pub fn _get_pos(&self) -> &Positional {
         &self.value
     }
 }
@@ -176,8 +161,8 @@ mod test {
                 switch: Some('h'),
             }
         );
-        assert_eq!(help.get_switch_ref(), Some(&'h'));
-        assert_eq!(help.get_name_ref(), "help");
+        assert_eq!(help.get_switch(), Some(&'h'));
+        assert_eq!(help.get_name(), "help");
 
         let version = Flag::new("version");
         assert_eq!(
@@ -187,8 +172,8 @@ mod test {
                 switch: None,
             }
         );
-        assert_eq!(version.get_switch_ref(), None);
-        assert_eq!(version.get_name_ref(), "version");
+        assert_eq!(version.get_switch(), None);
+        assert_eq!(version.get_name(), "version");
     }
 
     #[test]
@@ -210,7 +195,7 @@ mod test {
                 value: Positional::new("code"),
             }
         );
-        assert_eq!(code.get_flag_ref().get_switch_ref(), None);
+        assert_eq!(code.get_flag().get_switch(), None);
 
         let version = Optional::new("color").value("rgb");
         assert_eq!(
@@ -220,7 +205,7 @@ mod test {
                 value: Positional::new("rgb"),
             }
         );
-        assert_eq!(version.get_flag_ref().get_switch_ref(), None);
+        assert_eq!(version.get_flag().get_switch(), None);
 
         let version = Optional::new("color").value("rgb").switch('c');
         assert_eq!(
@@ -230,9 +215,9 @@ mod test {
                 value: Positional::new("rgb"),
             }
         );
-        assert_eq!(version.get_flag_ref().get_switch_ref(), Some(&'c'));
+        assert_eq!(version.get_flag().get_switch(), Some(&'c'));
 
-        assert_eq!(version._get_pos_ref(), &Positional::new("rgb"));
+        assert_eq!(version._get_pos(), &Positional::new("rgb"));
     }
 
     #[test]
@@ -255,18 +240,17 @@ mod test {
         let help = Arg::Flag(Flag::new("help"));
         assert_eq!(help.to_string(), "--help");
 
-        assert_eq!(help.as_flag_ref().to_string(), "--help");
+        assert_eq!(help.as_flag().unwrap().to_string(), "--help");
 
         let color = Arg::Optional(Optional::new("color").value("rgb"));
         assert_eq!(color.to_string(), "--color <rgb>");
 
-        assert_eq!(color.as_flag_ref().get_name_ref(), "color");
+        assert_eq!(color.as_flag().unwrap().get_name(), "color");
     }
 
     #[test]
-    #[should_panic]
     fn arg_impossible_pos_as_flag() {
         let command = Arg::Positional(Positional::new("command"));
-        let _ = command.as_flag_ref();
+        assert_eq!(command.as_flag(), None);
     }
 }
