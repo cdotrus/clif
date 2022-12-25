@@ -1,5 +1,5 @@
-use std::ops::Range;
 use crate::arg::Flag;
+use std::ops::Range;
 
 mod tag {
     pub const FLAG: &str = "help";
@@ -59,9 +59,9 @@ impl<'c> Help<'c> {
     }
 
     /// References the appropriate lines for a text statement for usage according to the line range `line_bounds`.
-    /// 
+    ///
     /// The function will fail to set a usage statement without panicking if the the range is out-of-bounds.
-    /// 
+    ///
     /// The range must be specified as `inclusive..exclusive`.
     pub fn ref_usage(mut self, line_bounds: Range<usize>) -> Self {
         let mut lines = self.get_quick_text().split_terminator('\n').enumerate();
@@ -79,16 +79,20 @@ impl<'c> Help<'c> {
 
             // increment the number of characters passed (+1 to account for missing NEW_LINE character that was split)
             running_sum += data.len() + 1;
-            
+
             // check if we hit the upper bound of the index (inclusive)
-            if i+1 == line_bounds.end {
-                end_char = Some(running_sum-1);
+            if i + 1 == line_bounds.end {
+                end_char = Some(running_sum - 1);
                 break;
             }
         }
         // ensure there is a starting and ending character index to reference.
         if start_char.is_some() == true && end_char.is_some() == true {
-            self.usage = Some(self.quick_text.get(start_char.unwrap()..end_char.unwrap()).unwrap());
+            self.usage = Some(
+                self.quick_text
+                    .get(start_char.unwrap()..end_char.unwrap())
+                    .unwrap(),
+            );
         }
 
         self

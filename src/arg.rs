@@ -18,13 +18,13 @@ impl<'a> Arg<'a> {
         match self {
             Arg::Flag(f) => f,
             Arg::Optional(o) => o.get_flag_ref(),
-            Arg::Positional(_) => panic!("positional cannot be accessed as flag")
+            Arg::Positional(_) => panic!("positional cannot be accessed as flag"),
         }
     }
 }
 
 impl<'a> Display for Arg<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> { 
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
             Arg::Flag(a) => write!(f, "{}", a),
             Arg::Positional(a) => write!(f, "{}", a),
@@ -35,12 +35,12 @@ impl<'a> Display for Arg<'a> {
 
 #[derive(Debug, PartialEq)]
 pub struct Temp<T: AsRef<str>> {
-    name: T
+    name: T,
 }
 
 impl<T: AsRef<str>> Temp<T> {
     pub fn new(s: T) -> Self {
-        Self { name: s, }
+        Self { name: s }
     }
 
     pub fn get_name_ref(&self) -> &T {
@@ -55,13 +55,19 @@ pub struct Positional<'a> {
 
 impl<'a> Positional<'a> {
     pub fn new(s: &'a str) -> Self {
-        Self { name: s, }
+        Self { name: s }
     }
 }
 
 impl<'a> Display for Positional<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> { 
-        write!(f, "{}{}{}", symbol::POS_BRACKET_L, self.name, symbol::POS_BRACKER_R)
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(
+            f,
+            "{}{}{}",
+            symbol::POS_BRACKET_L,
+            self.name,
+            symbol::POS_BRACKER_R
+        )
     }
 }
 
@@ -73,7 +79,10 @@ pub struct Flag<'a> {
 
 impl<'a> Flag<'a> {
     pub fn new(s: &'a str) -> Self {
-        Self { name: s, switch: None, }
+        Self {
+            name: s,
+            switch: None,
+        }
     }
 
     pub fn switch(mut self, c: char) -> Self {
@@ -91,7 +100,7 @@ impl<'a> Flag<'a> {
 }
 
 impl<'a> Display for Flag<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> { 
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(f, "{}{}", symbol::FLAG, self.name)
     }
 }
@@ -104,7 +113,10 @@ pub struct Optional<'a> {
 
 impl<'a> Optional<'a> {
     pub fn new(s: &'a str) -> Self {
-        Self { option: Flag::new(s), value: Positional::new(s), }
+        Self {
+            option: Flag::new(s),
+            value: Positional::new(s),
+        }
     }
 
     pub fn value(mut self, s: &'a str) -> Self {
@@ -127,7 +139,7 @@ impl<'a> Optional<'a> {
 }
 
 impl<'a> Display for Optional<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> { 
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(f, "{} {}", self.option, self.value)
     }
 }
@@ -139,14 +151,10 @@ mod test {
     #[test]
     fn positional_new() {
         let ip = Positional::new("ip");
-        assert_eq!(ip, Positional {
-            name: "ip",
-        });
+        assert_eq!(ip, Positional { name: "ip" });
 
         let version = Positional::new("version");
-        assert_eq!(version, Positional {
-            name: "version",
-        });
+        assert_eq!(version, Positional { name: "version" });
     }
 
     #[test]
@@ -161,18 +169,24 @@ mod test {
     #[test]
     fn flag_new() {
         let help = Flag::new("help").switch('h');
-        assert_eq!(help, Flag {
-            name: "help",
-            switch: Some('h'),
-        });
+        assert_eq!(
+            help,
+            Flag {
+                name: "help",
+                switch: Some('h'),
+            }
+        );
         assert_eq!(help.get_switch_ref(), Some(&'h'));
         assert_eq!(help.get_name_ref(), "help");
 
         let version = Flag::new("version");
-        assert_eq!(version, Flag {
-            name: "version",
-            switch: None,
-        });
+        assert_eq!(
+            version,
+            Flag {
+                name: "version",
+                switch: None,
+            }
+        );
         assert_eq!(version.get_switch_ref(), None);
         assert_eq!(version.get_name_ref(), "version");
     }
@@ -189,24 +203,33 @@ mod test {
     #[test]
     fn optional_new() {
         let code = Optional::new("code");
-        assert_eq!(code, Optional {
-            option: Flag::new("code"),
-            value: Positional::new("code"),
-        });
+        assert_eq!(
+            code,
+            Optional {
+                option: Flag::new("code"),
+                value: Positional::new("code"),
+            }
+        );
         assert_eq!(code.get_flag_ref().get_switch_ref(), None);
 
         let version = Optional::new("color").value("rgb");
-        assert_eq!(version, Optional {
-            option: Flag::new("color"),
-            value: Positional::new("rgb"),
-        });
+        assert_eq!(
+            version,
+            Optional {
+                option: Flag::new("color"),
+                value: Positional::new("rgb"),
+            }
+        );
         assert_eq!(version.get_flag_ref().get_switch_ref(), None);
 
         let version = Optional::new("color").value("rgb").switch('c');
-        assert_eq!(version, Optional {
-            option: Flag::new("color").switch('c'),
-            value: Positional::new("rgb"),
-        });
+        assert_eq!(
+            version,
+            Optional {
+                option: Flag::new("color").switch('c'),
+                value: Positional::new("rgb"),
+            }
+        );
         assert_eq!(version.get_flag_ref().get_switch_ref(), Some(&'c'));
 
         assert_eq!(version._get_pos_ref(), &Positional::new("rgb"));

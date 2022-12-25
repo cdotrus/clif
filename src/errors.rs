@@ -1,8 +1,8 @@
 use crate::arg::Arg;
-use std::fmt::Display;
-use std::error::Error;
-use colored::*;
 use crate::help::Help;
+use colored::*;
+use std::error::Error;
+use std::fmt::Display;
 
 mod exit_code {
     pub const BAD: u8 = 101;
@@ -21,7 +21,7 @@ type Helper<'a> = Option<Help<'a>>;
 
 #[derive(Debug, PartialEq)]
 pub enum CliError<'a> {
-    /// argument, value, error message 
+    /// argument, value, error message
     BadType(Arg<'a>, Value, ErrMessage, Helper<'a>),
     /// argument, help
     MissingPositional(Arg<'a>, Helper<'a>),
@@ -54,17 +54,15 @@ impl<'a> CliError<'a> {
     pub fn code(&self) -> u8 {
         match &self {
             Self::Help(_) => exit_code::OKAY,
-            _ => exit_code::BAD
+            _ => exit_code::BAD,
         }
     }
 
     /// Casts the error to the quick help message if the error is for requesting help.
     pub fn as_quick_help(&self) -> Option<&str> {
         match &self {
-            Self::Help(h) => {
-                Some(h.as_ref()?.get_quick_text())
-            },
-            _ => None
+            Self::Help(h) => Some(h.as_ref()?.get_quick_text()),
+            _ => None,
         }
     }
 }
@@ -72,7 +70,7 @@ impl<'a> CliError<'a> {
 impl<'a> Error for CliError<'a> {}
 
 impl<'a> Display for CliError<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> { 
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         // body
         match self {
             Self::ExceedingMaxCount(n, s, o) => write!(f, "option '{}' was requested {} times, but cannot exceed {}", o, s, n),
@@ -91,18 +89,18 @@ impl<'a> Display for CliError<'a> {
         }?;
         // footer
         match self {
-            Self::OutOfContextArgSuggest(_, _, he) | 
-            Self::BadType(_, _, _, he) |
-            Self::MissingPositional(_, he) |
-            Self::DuplicateOptions(_, he) |
-            Self::ExpectingValue(_, he) |
-            Self::UnexpectedArg(_, he) |
-            Self::UnknownSubcommand(_, _, he) => {
+            Self::OutOfContextArgSuggest(_, _, he)
+            | Self::BadType(_, _, _, he)
+            | Self::MissingPositional(_, he)
+            | Self::DuplicateOptions(_, he)
+            | Self::ExpectingValue(_, he)
+            | Self::UnexpectedArg(_, he)
+            | Self::UnknownSubcommand(_, _, he) => {
                 if let Some(help) = he {
                     write!(f, "\n\nFor more information try {}", help.get_flag())?
                 }
-            },
-            _ => ()
+            }
+            _ => (),
         }
         Ok(())
     }

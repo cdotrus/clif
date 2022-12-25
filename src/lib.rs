@@ -7,24 +7,24 @@ mod seqalin;
 
 #[cfg(test)]
 mod tests {
-    use crate::cli::Cli;
-    use crate::arg::{Positional, Flag};
     use super::*;
+    use crate::arg::{Flag, Positional};
+    use crate::cli::Cli;
 
     /// Helper test `fn` to write vec of &str as iterator for Cli parameter.
-    fn args<'a>(args: Vec<&'a str>) -> Box<dyn Iterator<Item=String> + 'a> {
+    fn args<'a>(args: Vec<&'a str>) -> Box<dyn Iterator<Item = String> + 'a> {
         Box::new(args.into_iter().map(|f| f.to_string()).into_iter())
     }
 
     mod radd {
-        use crate::command::{FromCli, Command, Runner};
         use super::*;
+        use crate::command::{Command, FromCli, Runner};
 
         /// `Radd` is 'rust-add' that can add two unsigned 8-bit values together.
         #[derive(PartialEq, Debug)]
         struct Radd {
             lhs: u8,
-            rhs: u8, 
+            rhs: u8,
             verbose: bool,
         }
 
@@ -37,7 +37,10 @@ mod tests {
         impl Runner<()> for Radd {}
 
         impl FromCli for Radd {
-            fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, errors::CliError<'c>> where Self: Sized {
+            fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, errors::CliError<'c>>
+            where
+                Self: Sized,
+            {
                 // set help text in case of an error
                 cli.help(help::Help::new().quick_text(HELP))?;
                 let radd = Radd {

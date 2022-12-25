@@ -1,6 +1,6 @@
 use crate::cli::Cli;
-use std::fmt::Debug;
 use crate::errors::CliError;
+use std::fmt::Debug;
 
 pub trait Command<T>: Debug {
     type Status;
@@ -9,24 +9,26 @@ pub trait Command<T>: Debug {
 
 pub trait FromCli {
     /// Collects tokens from the command-line interface to define a struct's fields.
-    /// 
-    /// The recommended argument discovery order is 
+    ///
+    /// The recommended argument discovery order is
     /// 1. `flags`
     /// 2. `optionals`
     /// 3. `positionals`
     /// 4. `subcommands`
-    fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, CliError<'c>> where Self: Sized;
+    fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, CliError<'c>>
+    where
+        Self: Sized;
 }
 
 pub trait Runner<T>: Command<T> + FromCli + Debug {}
 
 #[cfg(test)]
 mod test {
-    use crate::{arg::*, help::Help};
     use super::*;
+    use crate::{arg::*, help::Help};
 
     /// Helper test fn to write vec of &str as iterator for Cli parameter.
-    fn args<'a>(args: Vec<&'a str>) -> Box<dyn Iterator<Item=String> + 'a> {
+    fn args<'a>(args: Vec<&'a str>) -> Box<dyn Iterator<Item = String> + 'a> {
         Box::new(args.into_iter().map(|f| f.to_string()).into_iter())
     }
 
@@ -42,7 +44,7 @@ mod test {
         type Status = ();
 
         fn exec(&self, _: &()) -> Self::Status {
-           println!("{}", self.run())
+            println!("{}", self.run())
         }
     }
 
@@ -58,8 +60,12 @@ mod test {
     }
 
     impl FromCli for Add {
-        fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self,  CliError<'c>> {
-            cli.help(Help::new().quick_text("    add <lhs> <rhs> [--verbose]").ref_usage(0..0))?;
+        fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, CliError<'c>> {
+            cli.help(
+                Help::new()
+                    .quick_text("    add <lhs> <rhs> [--verbose]")
+                    .ref_usage(0..0),
+            )?;
             // the ability to "learn options" beforehand is possible, or can be skipped
             // "learn options" here (take in known args (as ref?))
             Ok(Add {
@@ -88,7 +94,7 @@ mod test {
     }
 
     impl FromCli for Op {
-        fn from_cli<'c>(cli: &'c mut Cli<'_>) -> Result<Self, CliError<'c>> { 
+        fn from_cli<'c>(cli: &'c mut Cli<'_>) -> Result<Self, CliError<'c>> {
             Ok(Op {
                 version: cli.check_flag(Flag::new("version"))?,
                 command: cli.check_command(Positional::new("subcommand"))?,
@@ -98,18 +104,14 @@ mod test {
 
     #[derive(Debug, PartialEq)]
     enum OpSubcommand {
-        Add(Add)
+        Add(Add),
     }
 
     impl FromCli for OpSubcommand {
-        fn from_cli<'c>(cli: &'c mut Cli<'_>) -> Result<Self, CliError<'c>> { 
-            match cli.match_command(&[
-                "add", 
-                "mult", 
-                "sub"
-            ])?.as_ref() {
+        fn from_cli<'c>(cli: &'c mut Cli<'_>) -> Result<Self, CliError<'c>> {
+            match cli.match_command(&["add", "mult", "sub"])?.as_ref() {
                 "add" => Ok(OpSubcommand::Add(Add::from_cli(cli)?)),
-                _ => panic!("an unimplemented command was passed through!")
+                _ => panic!("an unimplemented command was passed through!"),
             }
         }
     }
@@ -127,59 +129,77 @@ mod test {
     fn make_add_command() {
         let mut cli = Cli::new().tokenize(args(vec!["add", "9", "10"]));
         let add = Add::from_cli(&mut cli).unwrap();
-        assert_eq!(add, Add {
-            lhs: 9,
-            rhs: 10,
-            verbose: false
-        });
+        assert_eq!(
+            add,
+            Add {
+                lhs: 9,
+                rhs: 10,
+                verbose: false
+            }
+        );
 
         let mut cli = Cli::new().tokenize(args(vec!["add", "1", "4", "--verbose"]));
         let add = Add::from_cli(&mut cli).unwrap();
-        assert_eq!(add, Add {
-            lhs: 1,
-            rhs: 4,
-            verbose: true
-        });
+        assert_eq!(
+            add,
+            Add {
+                lhs: 1,
+                rhs: 4,
+                verbose: true
+            }
+        );
 
         let mut cli = Cli::new().tokenize(args(vec!["add", "5", "--verbose", "2"]));
         let add = Add::from_cli(&mut cli).unwrap();
-        assert_eq!(add, Add {
-            lhs: 5,
-            rhs: 2,
-            verbose: true
-        });
+        assert_eq!(
+            add,
+            Add {
+                lhs: 5,
+                rhs: 2,
+                verbose: true
+            }
+        );
     }
 
     #[test]
     fn nested_commands() {
         let mut cli = Cli::new().tokenize(args(vec!["op", "add", "9", "10"]));
         let op = Op::from_cli(&mut cli).unwrap();
-        assert_eq!(op, Op {
-            version: false,
-            command: Some(OpSubcommand::Add(Add {
-                lhs: 9,
-                rhs: 10,
-                verbose: false,
-            }))
-        });
+        assert_eq!(
+            op,
+            Op {
+                version: false,
+                command: Some(OpSubcommand::Add(Add {
+                    lhs: 9,
+                    rhs: 10,
+                    verbose: false,
+                }))
+            }
+        );
 
         let mut cli = Cli::new().tokenize(args(vec!["op"]));
         let op = Op::from_cli(&mut cli).unwrap();
-        assert_eq!(op, Op {
-            version: false,
-            command: None
-        });
+        assert_eq!(
+            op,
+            Op {
+                version: false,
+                command: None
+            }
+        );
 
         let mut cli = Cli::new().tokenize(args(vec!["op", "--version", "add", "9", "10"]));
         let op = Op::from_cli(&mut cli).unwrap();
-        assert_eq!(op, Op {
-            version: true,
-            command: Some(OpSubcommand::Add(Add {
-                lhs: 9,
-                rhs: 10,
-                verbose: false,
-            }))
-        });
+        assert_eq!(
+            op,
+            Op {
+                version: true,
+                command: Some(OpSubcommand::Add(Add {
+                    lhs: 9,
+                    rhs: 10,
+                    verbose: false,
+                }))
+            }
+        );
 
         // out-of-context arg '--verbose' move it after 'add'
         let mut cli = Cli::new().tokenize(args(vec!["op", "--verbose", "add", "9", "10"]));

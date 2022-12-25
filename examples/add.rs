@@ -1,10 +1,10 @@
-use cliprs::command::{FromCli, Command, Runner};
-use cliprs::cli::Cli;
-use cliprs::help::Help;
-use cliprs::errors::CliError;
 use cliprs::arg::*;
-use std::env::args;
+use cliprs::cli::Cli;
+use cliprs::command::{Command, FromCli, Runner};
+use cliprs::errors::CliError;
+use cliprs::help::Help;
 use colored::*;
+use std::env::args;
 
 fn main() {
     std::process::exit(go() as i32)
@@ -13,16 +13,14 @@ fn main() {
 /// Glues the interface layer and backend logic for a smooth hand-off of data.
 fn go() -> u8 {
     // parse the command-line arguments
-    let mut cli = Cli::new()
-        .threshold(4)
-        .tokenize(args());
+    let mut cli = Cli::new().threshold(4).tokenize(args());
 
     match Addrs::from_cli(&mut cli) {
         // construct the application
-        Ok(app) => { 
-            std::mem::drop(cli); 
-            app.exec(&()) 
-        },
+        Ok(app) => {
+            std::mem::drop(cli);
+            app.exec(&())
+        }
         // report cli error
         Err(err) => {
             match err.as_quick_help() {
@@ -38,7 +36,7 @@ fn go() -> u8 {
 #[derive(PartialEq, Debug)]
 struct Addrs {
     lhs: u8,
-    rhs: u8, 
+    rhs: u8,
     verbose: bool,
     count: Vec<u8>,
 }
@@ -54,7 +52,10 @@ impl Addrs {
 impl Runner<()> for Addrs {}
 
 impl FromCli for Addrs {
-    fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, CliError<'c>> where Self: Sized {
+    fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, CliError<'c>>
+    where
+        Self: Sized,
+    {
         // @note: experiment with T type for str reference
         // let m = arg::Temp::new("hello");
         // let t: Temp<String> = arg::Temp::new("lhs".yellow().to_string());
@@ -62,13 +63,17 @@ impl FromCli for Addrs {
         // println!("{}", t.get_name_ref());
 
         // set short help text in case of an error
-        cli.help(Help::new()
-            .quick_text(HELP)
-            .flag(Flag::new("help").switch('h'))
-            .ref_usage(USAGE_LINE..USAGE_LINE+2))?;
+        cli.help(
+            Help::new()
+                .quick_text(HELP)
+                .flag(Flag::new("help").switch('h'))
+                .ref_usage(USAGE_LINE..USAGE_LINE + 2),
+        )?;
         let radd = Addrs {
             verbose: cli.check_flag(Flag::new("verbose"))?,
-            count: cli.check_option_n(Optional::new("count").switch('c'), 3)?.unwrap_or(vec![]),
+            count: cli
+                .check_option_n(Optional::new("count").switch('c'), 3)?
+                .unwrap_or(vec![]),
             lhs: cli.require_positional(Positional::new("lhs"))?,
             rhs: cli.require_positional(Positional::new("rhs"))?,
         };
@@ -92,7 +97,7 @@ impl Command<()> for Addrs {
     }
 }
 
- // 0-indexed from `HELP` string
+// 0-indexed from `HELP` string
 const USAGE_LINE: usize = 2;
 
 const HELP: &str = "\
@@ -111,7 +116,7 @@ Options:
 
 #[cfg(test)]
 mod test {
-    use super::*; 
+    use super::*;
 
     #[test]
     fn backend_logic() {
