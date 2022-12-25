@@ -1,7 +1,6 @@
 use crate::arg::Arg;
 use crate::help::Help;
 use colored::*;
-use std::error::Error;
 use std::fmt::Display;
 
 mod exit_code {
@@ -10,7 +9,6 @@ mod exit_code {
 }
 
 type Value = String;
-type ErrMessage = String;
 type Subcommand = String;
 type Suggestion = String;
 type PrevCommand = String;
@@ -19,10 +17,10 @@ type CurCount = usize;
 type Argument = String;
 type Helper<'a> = Option<Help<'a>>;
 
-#[derive(Debug, PartialEq)]
-pub enum CliError<'a> {
+#[derive(Debug)]
+pub enum Error<'a> {
     /// argument, value, error message
-    BadType(Arg<'a>, Value, ErrMessage, Helper<'a>),
+    BadType(Arg<'a>, Value, Box<dyn std::error::Error>, Helper<'a>),
     /// argument, help
     MissingPositional(Arg<'a>, Helper<'a>),
     /// argument
@@ -42,14 +40,31 @@ pub enum CliError<'a> {
     /// argument, previous command
     UnknownSubcommand(Arg<'a>, PrevCommand, Helper<'a>),
     /// error message
-    BrokenRule(ErrMessage),
+    BrokenRule(Box<dyn std::error::Error>),
     /// quick help text
     Help(Helper<'a>),
     /// n, incorrect size, argument
     ExceedingMaxCount(MaxCount, CurCount, Arg<'a>),
 }
 
-impl<'a> CliError<'a> {
+#[derive(Debug, PartialEq)]
+pub enum ErrorKind {
+    BadType,
+    MissingPositional,
+    DuplicateOptions,
+    ExpectingValue,
+    UnexpectedValue,
+    OutOfContextArgSuggest,
+    UnexpectedArg,
+    SuggestArg,
+    SuggestSubcommand,
+    UnknownSubcommand,
+    BrokenRule,
+    Help,
+    ExceedingMaxCount
+}
+
+impl<'a> Error<'a> {
     /// Returns `OKAY_CODE` for help error and `BAD_CODE` otherwise.
     pub fn code(&self) -> u8 {
         match &self {
@@ -65,11 +80,29 @@ impl<'a> CliError<'a> {
             _ => None,
         }
     }
+
+    pub fn kind(&self) -> ErrorKind {
+        match self {
+            Self::ExceedingMaxCount(_, _, _) => ErrorKind::ExceedingMaxCount,
+            Self::Help(_) => ErrorKind::Help,
+            Self::SuggestArg(_, _) =>ErrorKind::SuggestArg,
+            Self::SuggestSubcommand(_, _) =>ErrorKind::SuggestSubcommand,
+            Self::OutOfContextArgSuggest(_, _, _) => ErrorKind::OutOfContextArgSuggest,
+            Self::BadType(_, _, _, _) => ErrorKind::BadType,
+            Self::MissingPositional(_, _) => ErrorKind::MissingPositional,
+            Self::DuplicateOptions(_, _) => ErrorKind::DuplicateOptions,
+            Self::ExpectingValue(_, _) => ErrorKind::ExpectingValue,
+            Self::UnexpectedValue(_, _) => ErrorKind::UnexpectedValue,
+            Self::UnexpectedArg(_, _) =>ErrorKind::UnexpectedArg,
+            Self::UnknownSubcommand(_, _, _) => ErrorKind::UnknownSubcommand,
+            Self::BrokenRule(_) => ErrorKind::BrokenRule,
+        }
+    }
 }
 
-impl<'a> Error for CliError<'a> {}
+impl<'a> std::error::Error for Error<'a> {}
 
-impl<'a> Display for CliError<'a> {
+impl<'a> Display for Error<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         // body
         match self {

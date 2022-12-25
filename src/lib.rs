@@ -1,9 +1,25 @@
-pub mod arg;
-pub mod cli;
-pub mod command;
-pub mod error;
-pub mod help;
+mod cli;
+mod error;
+mod help;
 mod seqalin;
+mod command;
+
+pub mod arg;
+
+pub use error::Error as Error;
+pub use error::ErrorKind as ErrorKind;
+pub use cli::Cli as Cli;
+pub use help::Help as Help;
+
+pub mod cmd {
+    pub use super::command::Runner as Runner;
+    pub use super::command::FromCli as FromCli;
+    pub use super::command::Command as Command;
+}
+
+// pub use arg::Flag;
+// pub use arg::Optional;
+// pub use arg::Positional;
 
 #[cfg(test)]
 mod tests {
@@ -37,7 +53,7 @@ mod tests {
         impl Runner<()> for Radd {}
 
         impl FromCli for Radd {
-            fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, error::CliError<'c>>
+            fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, error::Error<'c>>
             where
                 Self: Sized,
             {

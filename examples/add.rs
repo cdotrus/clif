@@ -1,10 +1,11 @@
-use cliprs::arg::*;
-use cliprs::cli::Cli;
-use cliprs::command::{Command, FromCli, Runner};
-use cliprs::error::CliError;
-use cliprs::help::Help;
 use colored::*;
 use std::env::args;
+
+use cliprs::Cli;
+use cliprs::Error;
+use cliprs::Help;
+use cliprs::arg::*;
+use cliprs::cmd::{Command, FromCli, Runner};
 
 fn main() {
     std::process::exit(go() as i32)
@@ -52,7 +53,7 @@ impl Addrs {
 impl Runner<()> for Addrs {}
 
 impl FromCli for Addrs {
-    fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, CliError<'c>>
+    fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, Error<'c>>
     where
         Self: Sized,
     {

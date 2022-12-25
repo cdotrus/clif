@@ -1,6 +1,6 @@
 use crate::arg::*;
 use crate::command::FromCli;
-use crate::error::CliError;
+use crate::error::Error;
 use crate::help::Help;
 use crate::seqalin;
 use crate::seqalin::Cost;
@@ -181,7 +181,7 @@ impl<'c> Cli<'c> {
     ///
     /// If the help text has a line describing overall usage, you can specify it with `usage_line`.
     /// This value the 0-indexed line to print when a missing positional error occurs.
-    pub fn help(&mut self, help: Help<'c>) -> Result<(), CliError<'c>> {
+    pub fn help(&mut self, help: Help<'c>) -> Result<(), Error<'c>> {
         self.help = Some(help);
         // check for flag if not already raised
         if self.asking_for_help == false && self.is_help_enabled() == true {
@@ -219,12 +219,12 @@ impl<'c> Cli<'c> {
 
     /// Checks if help has been raised and will return its own error for displaying
     /// help.
-    fn prioritize_help(&self) -> Result<(), CliError<'c>> {
+    fn prioritize_help(&self) -> Result<(), Error<'c>> {
         if self.prioritize_help == true
             && self.asking_for_help == true
             && self.is_help_enabled() == true
         {
-            Err(CliError::Help(self.help.clone()))
+            Err(Error::Help(self.help.clone()))
         } else {
             Ok(())
         }
@@ -254,7 +254,7 @@ impl<'c> Cli<'c> {
     pub fn check_command<'a, T: FromCli>(
         &mut self,
         p: Positional<'c>,
-    ) -> Result<Option<T>, CliError<'_>> {
+    ) -> Result<Option<T>, Error<'_>> {
         self.known_args.push(Arg::Positional(p));
         // check but do not remove if an unattached arg exists
         let command_exists = self
@@ -281,7 +281,7 @@ impl<'c> Cli<'c> {
     pub fn match_command<T: AsRef<str> + std::cmp::PartialEq>(
         &mut self,
         words: &[T],
-    ) -> Result<String, CliError<'c>> {
+    ) -> Result<String, Error<'c>> {
         // find the unattached arg's index before it is removed from the token stream
         let i: usize = self
             .tokens
@@ -301,7 +301,7 @@ impl<'c> Cli<'c> {
             if let Some((prefix, key, pos)) = ooc_arg {
                 if pos < i {
                     self.prioritize_help()?;
-                    return Err(CliError::OutOfContextArgSuggest(
+                    return Err(Error::OutOfContextArgSuggest(
                         format!("{}{}", prefix, key),
                         s,
                         self.help.clone(),
@@ -317,10 +317,10 @@ impl<'c> Cli<'c> {
             } else {
                 None
             } {
-                Err(CliError::SuggestSubcommand(s, w.to_string()))
+                Err(Error::SuggestSubcommand(s, w.to_string()))
             } else {
                 self.prioritize_help()?;
-                Err(CliError::UnknownSubcommand(
+                Err(Error::UnknownSubcommand(
                     self.known_args.pop().expect("requires positional argument"),
                     s,
                     self.help.clone(),
@@ -335,9 +335,9 @@ impl<'c> Cli<'c> {
     pub fn check_positional<'a, T: FromStr>(
         &mut self,
         p: Positional<'c>,
-    ) -> Result<Option<T>, CliError<'c>>
+    ) -> Result<Option<T>, Error<'c>>
     where
-        <T as FromStr>::Err: std::error::Error,
+        <T as FromStr>::Err: 'static + std::error::Error,
     {
         self.known_args.push(Arg::Positional(p));
         match self.next_uarg() {
@@ -346,10 +346,10 @@ impl<'c> Cli<'c> {
                 Err(e) => {
                     self.prioritize_help()?;
                     self.prioritize_suggestion()?;
-                    Err(CliError::BadType(
+                    Err(Error::BadType(
                         self.known_args.pop().unwrap(),
                         s,
-                        e.to_string(),
+                        Box::new(e),
                         self.help.clone(),
                     ))
                 }
@@ -364,16 +364,16 @@ impl<'c> Cli<'c> {
     pub fn require_positional<'a, T: FromStr>(
         &mut self,
         p: Positional<'c>,
-    ) -> Result<T, CliError<'c>>
+    ) -> Result<T, Error<'c>>
     where
-        <T as FromStr>::Err: std::error::Error,
+        <T as FromStr>::Err: 'static + std::error::Error,
     {
         if let Some(value) = self.check_positional(p)? {
             Ok(value)
         } else {
             self.prioritize_help()?;
             self.is_empty()?;
-            Err(CliError::MissingPositional(
+            Err(Error::MissingPositional(
                 self.known_args.pop().unwrap(),
                 self.help.clone(),
             ))
@@ -383,7 +383,7 @@ impl<'c> Cli<'c> {
     /// Iterates through the list of tokens to find the first suggestion against a flag to return.
     ///
     /// Returns ok if cannot make a suggestion.
-    fn prioritize_suggestion(&self) -> Result<(), CliError<'c>> {
+    fn prioritize_suggestion(&self) -> Result<(), Error<'c>> {
         let mut kv: Vec<(&String, &Vec<usize>)> = self
             .opt_store
             .iter()
@@ -400,7 +400,7 @@ impl<'c> Cli<'c> {
                     } else {
                         None
                     } {
-                        Some(CliError::SuggestArg(
+                        Some(Error::SuggestArg(
                             format!("{}{}", symbol::FLAG, f.0),
                             format!("{}{}", symbol::FLAG, word),
                         ))
@@ -425,9 +425,9 @@ impl<'c> Cli<'c> {
     pub fn check_option<'a, T: FromStr>(
         &mut self,
         o: Optional<'c>,
-    ) -> Result<Option<T>, CliError<'c>>
+    ) -> Result<Option<T>, Error<'c>>
     where
-        <T as FromStr>::Err: std::error::Error,
+        <T as FromStr>::Err: 'static + std::error::Error,
     {
         // collect information on where the flag can be found
         let mut locs = self.take_flag_locs(o.get_flag().get_name());
@@ -445,17 +445,17 @@ impl<'c> Cli<'c> {
                         Ok(r) => Ok(Some(r)),
                         Err(e) => {
                             self.prioritize_help()?;
-                            Err(CliError::BadType(
+                            Err(Error::BadType(
                                 self.known_args.pop().unwrap(),
                                 s,
-                                e.to_string(),
+                                Box::new(e),
                                 self.help.clone(),
                             ))
                         }
                     }
                 } else {
                     self.prioritize_help()?;
-                    Err(CliError::ExpectingValue(
+                    Err(Error::ExpectingValue(
                         self.known_args.pop().unwrap(),
                         self.help.clone(),
                     ))
@@ -464,7 +464,7 @@ impl<'c> Cli<'c> {
             0 => Ok(None),
             _ => {
                 self.prioritize_help()?;
-                Err(CliError::DuplicateOptions(
+                Err(Error::DuplicateOptions(
                     self.known_args.pop().unwrap(),
                     self.help.clone(),
                 ))
@@ -479,16 +479,16 @@ impl<'c> Cli<'c> {
         &mut self,
         o: Optional<'c>,
         n: usize,
-    ) -> Result<Option<Vec<T>>, CliError<'c>>
+    ) -> Result<Option<Vec<T>>, Error<'c>>
     where
-        <T as FromStr>::Err: std::error::Error,
+        <T as FromStr>::Err: 'static + std::error::Error,
     {
         let values = self.check_option_all::<T>(o)?;
         match values {
             // verify the size of the vector does not exceed `n`
             Some(r) => match r.len() <= n {
                 true => Ok(Some(r)),
-                false => Err(CliError::ExceedingMaxCount(
+                false => Err(Error::ExceedingMaxCount(
                     n,
                     r.len(),
                     self.known_args.pop().unwrap(),
@@ -504,9 +504,9 @@ impl<'c> Cli<'c> {
     pub fn check_option_all<'a, T: FromStr>(
         &mut self,
         o: Optional<'c>,
-    ) -> Result<Option<Vec<T>>, CliError<'c>>
+    ) -> Result<Option<Vec<T>>, Error<'c>>
     where
-        <T as FromStr>::Err: std::error::Error,
+        <T as FromStr>::Err: 'static + std::error::Error,
     {
         // collect information on where the flag can be found
         let mut locs = self.take_flag_locs(o.get_flag().get_name());
@@ -528,17 +528,17 @@ impl<'c> Cli<'c> {
                     Ok(r) => transform.push(r),
                     Err(e) => {
                         self.prioritize_help()?;
-                        return Err(CliError::BadType(
+                        return Err(Error::BadType(
                             self.known_args.pop().unwrap(),
                             s,
-                            e.to_string(),
+                            Box::new(e),
                             self.help.clone(),
                         ));
                     }
                 }
             } else {
                 self.prioritize_help()?;
-                return Err(CliError::ExpectingValue(
+                return Err(Error::ExpectingValue(
                     self.known_args.pop().unwrap(),
                     self.help.clone(),
                 ));
@@ -550,12 +550,12 @@ impl<'c> Cli<'c> {
     /// Queries if a flag was raised once and only once.
     ///
     /// Errors if the flag has an attached value or was raised multiple times.
-    pub fn check_flag<'a>(&mut self, f: Flag<'c>) -> Result<bool, CliError<'c>> {
+    pub fn check_flag<'a>(&mut self, f: Flag<'c>) -> Result<bool, Error<'c>> {
         let occurences = self.check_flag_all(f)?;
         match occurences > 1 {
             true => {
                 self.prioritize_help()?;
-                Err(CliError::DuplicateOptions(
+                Err(Error::DuplicateOptions(
                     self.known_args.pop().unwrap(),
                     self.help.clone(),
                 ))
@@ -568,7 +568,7 @@ impl<'c> Cli<'c> {
     /// Queries for the number of times a flag was raised.
     ///
     /// Errors if the flag has an attached value. Returning a zero indicates the flag was never raised.
-    pub fn check_flag_all<'a>(&mut self, f: Flag<'c>) -> Result<usize, CliError<'c>> {
+    pub fn check_flag_all<'a>(&mut self, f: Flag<'c>) -> Result<usize, Error<'c>> {
         // collect information on where the flag can be found
         let mut locs = self.take_flag_locs(f.get_name());
         // try to find the switch locations
@@ -580,7 +580,7 @@ impl<'c> Cli<'c> {
         // verify there are no values attached to this flag
         if let Some(val) = occurences.iter_mut().find(|p| p.is_some()) {
             self.prioritize_help()?;
-            return Err(CliError::UnexpectedValue(
+            return Err(Error::UnexpectedValue(
                 self.known_args.pop().unwrap(),
                 val.take().unwrap(),
             ));
@@ -609,12 +609,12 @@ impl<'c> Cli<'c> {
     /// Queries for the number of times a flag was raised up until `n` times.
     ///
     /// Errors if the flag has an attached value. Returning a zero indicates the flag was never raised.
-    pub fn check_flag_n<'a>(&mut self, f: Flag<'c>, n: usize) -> Result<usize, CliError<'c>> {
+    pub fn check_flag_n<'a>(&mut self, f: Flag<'c>, n: usize) -> Result<usize, Error<'c>> {
         let occurences = self.check_flag_all(f)?;
         // verify the size of the vector does not exceed `n`
         match occurences <= n {
             true => Ok(occurences),
-            false => Err(CliError::ExceedingMaxCount(
+            false => Err(Error::ExceedingMaxCount(
                 n,
                 occurences,
                 self.known_args.pop().unwrap(),
@@ -658,7 +658,7 @@ impl<'c> Cli<'c> {
     }
 
     /// Verifies there are no uncaught flags behind a given index.
-    fn capture_bad_flag<'a>(&self, i: usize) -> Result<Option<(&str, &str, usize)>, CliError<'c>> {
+    fn capture_bad_flag<'a>(&self, i: usize) -> Result<Option<(&str, &str, usize)>, Error<'c>> {
         if let Some((key, val)) = self.find_first_flag_left(i) {
             self.prioritize_help()?;
             // check what type of token it was to determine if it was called with '-' or '--'
@@ -673,7 +673,7 @@ impl<'c> Cli<'c> {
                         } else {
                             None
                         } {
-                            return Err(CliError::SuggestArg(
+                            return Err(Error::SuggestArg(
                                 format!("{}{}", symbol::FLAG, key),
                                 format!("{}{}", symbol::FLAG, s),
                             ));
@@ -694,11 +694,11 @@ impl<'c> Cli<'c> {
     /// Verifies there are no more tokens remaining in the stream.
     ///
     /// Note this mutates the referenced self only if an error is found.
-    pub fn is_empty<'a>(&'a self) -> Result<(), CliError<'c>> {
+    pub fn is_empty<'a>(&'a self) -> Result<(), Error<'c>> {
         self.prioritize_help()?;
         // check if map is empty, and return the minimum found index.
         if let Some((prefix, key, _)) = self.capture_bad_flag(self.tokens.len())? {
-            Err(CliError::UnexpectedArg(
+            Err(Error::UnexpectedArg(
                 format!("{}{}", prefix, key),
                 self.help.clone(),
             ))
@@ -706,9 +706,9 @@ impl<'c> Cli<'c> {
         } else if let Some(t) = self.tokens.iter().find(|p| p.is_some()) {
             match t {
                 Some(Token::UnattachedArgument(_, s)) => {
-                    Err(CliError::UnexpectedArg(s.to_string(), self.help.clone()))
+                    Err(Error::UnexpectedArg(s.to_string(), self.help.clone()))
                 }
-                Some(Token::Terminator(_)) => Err(CliError::UnexpectedArg(
+                Some(Token::Terminator(_)) => Err(Error::UnexpectedArg(
                     symbol::FLAG.to_string(),
                     self.help.clone(),
                 )),
@@ -755,7 +755,7 @@ impl<'c> Cli<'c> {
     ///
     /// Errors if an `AttachedArg` is found (could only be immediately after terminator)
     /// after the terminator.
-    pub fn check_remainder(&mut self) -> Result<Vec<String>, CliError<'c>> {
+    pub fn check_remainder(&mut self) -> Result<Vec<String>, Error<'c>> {
         self.tokens
             .iter_mut()
             .skip_while(|tkn| match tkn {
@@ -770,7 +770,7 @@ impl<'c> Cli<'c> {
                         None
                     }
                     Some(Token::Ignore(_, _)) => Some(Ok(tkn.take().unwrap().take_str())),
-                    Some(Token::AttachedArgument(_, _)) => Some(Err(CliError::UnexpectedValue(
+                    Some(Token::AttachedArgument(_, _)) => Some(Err(Error::UnexpectedValue(
                         Arg::Flag(Flag::new("")),
                         tkn.take().unwrap().take_str(),
                     ))),
@@ -803,6 +803,7 @@ impl<'c> Cli<'c> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::error::ErrorKind;
 
     /// Helper test fn to write vec of &str as iterator for Cli parameter.
     fn args<'a>(args: Vec<&'a str>) -> Box<dyn Iterator<Item = String> + 'a> {
@@ -879,8 +880,8 @@ mod test {
         ]));
         // successfully matched 'get' command
         assert_eq!(
-            cli.match_command(&["new", "get", "install", "edit"]),
-            Ok("get".to_string())
+            cli.match_command(&["new", "get", "install", "edit"]).unwrap(),
+            "get".to_string()
         );
 
         let mut cli = Cli::new().threshold(4).tokenize(args(vec![
@@ -973,7 +974,7 @@ mod test {
         let _: String = cli.require_positional(Positional::new("command")).unwrap();
         let _: String = cli.require_positional(Positional::new("ip")).unwrap();
         // no more tokens left in stream
-        assert_eq!(cli.is_empty(), Ok(()));
+        assert_eq!(cli.is_empty().unwrap(), ());
 
         let mut cli = Cli::new().tokenize(args(vec!["orbit", "new", "rary.gates", symbol::FLAG]));
         // removes only valid args/flags/opts
@@ -999,7 +1000,7 @@ mod test {
             Cli::new().tokenize(args(vec!["orbit", symbol::FLAG, "some", "extra", "words"]));
         let _: Vec<String> = cli.check_remainder().unwrap();
         // terminator removed as well as its arguments that were ignored
-        assert_eq!(cli.is_empty(), Ok(()));
+        assert_eq!(cli.is_empty().unwrap(), ());
     }
 
     #[test]
@@ -1300,34 +1301,25 @@ mod test {
     #[test]
     fn check_flag() {
         let mut cli = Cli::new().tokenize(args(vec!["orbit", "--help", "--verbose", "get"]));
-        assert_eq!(cli.check_flag(Flag::new("help")), Ok(true));
-        assert_eq!(cli.check_flag(Flag::new("verbose")), Ok(true));
-        assert_eq!(cli.check_flag(Flag::new("version")), Ok(false));
+        assert_eq!(cli.check_flag(Flag::new("help")).unwrap(), true);
+        assert_eq!(cli.check_flag(Flag::new("verbose")).unwrap(), true);
+        assert_eq!(cli.check_flag(Flag::new("version")).unwrap(), false);
 
         let mut cli = Cli::new().tokenize(args(vec!["orbit", "--upgrade", "-u"]));
         assert_eq!(
-            cli.check_flag(Flag::new("upgrade").switch('u')),
-            Err(CliError::DuplicateOptions(
-                Arg::Flag(Flag::new("upgrade").switch('u')),
-                None
-            ))
+            cli.check_flag(Flag::new("upgrade").switch('u')).unwrap_err().kind(),
+            ErrorKind::DuplicateOptions
         );
 
         let mut cli =
             Cli::new().tokenize(args(vec!["orbit", "--verbose", "--verbose", "--version=9"]));
         assert_eq!(
-            cli.check_flag(Flag::new("verbose")),
-            Err(CliError::DuplicateOptions(
-                Arg::Flag(Flag::new("verbose")),
-                None
-            ))
+            cli.check_flag(Flag::new("verbose")).unwrap_err().kind(),
+            ErrorKind::DuplicateOptions
         );
         assert_eq!(
-            cli.check_flag(Flag::new("version")),
-            Err(CliError::UnexpectedValue(
-                Arg::Flag(Flag::new("version")),
-                "9".to_string()
-            ))
+            cli.check_flag(Flag::new("version")).unwrap_err().kind(),
+            ErrorKind::UnexpectedValue
         );
     }
 
@@ -1335,48 +1327,42 @@ mod test {
     fn check_positional() {
         let mut cli = Cli::new().tokenize(args(vec!["orbit", "new", "rary.gates"]));
         assert_eq!(
-            cli.check_positional::<String>(Positional::new("command")),
-            Ok(Some("new".to_string()))
+            cli.check_positional::<String>(Positional::new("command")).unwrap(),
+            Some("new".to_string())
         );
         assert_eq!(
-            cli.check_positional::<String>(Positional::new("ip")),
-            Ok(Some("rary.gates".to_string()))
+            cli.check_positional::<String>(Positional::new("ip")).unwrap(),
+            Some("rary.gates".to_string())
         );
         assert_eq!(
-            cli.check_positional::<i32>(Positional::new("path")),
-            Ok(None)
+            cli.check_positional::<i32>(Positional::new("path")).unwrap(),
+            None
         );
     }
 
     #[test]
     fn check_option() {
         let mut cli = Cli::new().tokenize(args(vec!["orbit", "command", "--rate", "10"]));
-        assert_eq!(cli.check_option(Optional::new("rate")), Ok(Some(10)));
+        assert_eq!(cli.check_option(Optional::new("rate")).unwrap(), Some(10));
 
         let mut cli = Cli::new().tokenize(args(vec![
             "orbit", "--flag", "--rate=9", "command", "-r", "14",
         ]));
         assert_eq!(
-            cli.check_option::<i32>(Optional::new("rate").switch('r')),
-            Err(CliError::DuplicateOptions(
-                Arg::Optional(Optional::new("rate").switch('r')),
-                None
-            ))
+            cli.check_option::<i32>(Optional::new("rate").switch('r')).unwrap_err().kind(),
+            ErrorKind::DuplicateOptions
         );
 
         let mut cli = Cli::new().tokenize(args(vec!["orbit", "--flag", "-r", "14"]));
         assert_eq!(
-            cli.check_option(Optional::new("rate").switch('r')),
-            Ok(Some(14))
+            cli.check_option(Optional::new("rate").switch('r')).unwrap(),
+            Some(14)
         );
 
         let mut cli = Cli::new().tokenize(args(vec!["orbit", "--flag", "--rate", "--verbose"]));
         assert_eq!(
-            cli.check_option::<i32>(Optional::new("rate")),
-            Err(CliError::ExpectingValue(
-                Arg::Optional(Optional::new("rate")),
-                None
-            ))
+            cli.check_option::<i32>(Optional::new("rate")).unwrap_err().kind(),
+            ErrorKind::ExpectingValue
         );
 
         let mut cli =
