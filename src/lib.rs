@@ -1,20 +1,20 @@
 mod cli;
+mod command;
 mod error;
 mod help;
 mod seqalin;
-mod command;
 
 pub mod arg;
 
-pub use error::Error as Error;
-pub use error::ErrorKind as ErrorKind;
-pub use cli::Cli as Cli;
-pub use help::Help as Help;
+pub use cli::Cli;
+pub use error::Error;
+pub use error::ErrorKind;
+pub use help::Help;
 
 pub mod cmd {
-    pub use super::command::Runner as Runner;
-    pub use super::command::FromCli as FromCli;
-    pub use super::command::Command as Command;
+    pub use super::command::Command;
+    pub use super::command::FromCli;
+    pub use super::command::Runner;
 }
 
 // pub use arg::Flag;

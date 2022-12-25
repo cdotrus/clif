@@ -361,10 +361,7 @@ impl<'c> Cli<'c> {
     /// Forces the next `Positional to exist from token stream.
     ///
     /// Errors if parsing fails or if no unattached argument is left in the token stream.
-    pub fn require_positional<'a, T: FromStr>(
-        &mut self,
-        p: Positional<'c>,
-    ) -> Result<T, Error<'c>>
+    pub fn require_positional<'a, T: FromStr>(&mut self, p: Positional<'c>) -> Result<T, Error<'c>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
@@ -422,10 +419,7 @@ impl<'c> Cli<'c> {
     /// Queries for a value of `Optional`.
     ///
     /// Errors if there are multiple values or if parsing fails.
-    pub fn check_option<'a, T: FromStr>(
-        &mut self,
-        o: Optional<'c>,
-    ) -> Result<Option<T>, Error<'c>>
+    pub fn check_option<'a, T: FromStr>(&mut self, o: Optional<'c>) -> Result<Option<T>, Error<'c>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
@@ -880,7 +874,8 @@ mod test {
         ]));
         // successfully matched 'get' command
         assert_eq!(
-            cli.match_command(&["new", "get", "install", "edit"]).unwrap(),
+            cli.match_command(&["new", "get", "install", "edit"])
+                .unwrap(),
             "get".to_string()
         );
 
@@ -1307,7 +1302,9 @@ mod test {
 
         let mut cli = Cli::new().tokenize(args(vec!["orbit", "--upgrade", "-u"]));
         assert_eq!(
-            cli.check_flag(Flag::new("upgrade").switch('u')).unwrap_err().kind(),
+            cli.check_flag(Flag::new("upgrade").switch('u'))
+                .unwrap_err()
+                .kind(),
             ErrorKind::DuplicateOptions
         );
 
@@ -1327,15 +1324,18 @@ mod test {
     fn check_positional() {
         let mut cli = Cli::new().tokenize(args(vec!["orbit", "new", "rary.gates"]));
         assert_eq!(
-            cli.check_positional::<String>(Positional::new("command")).unwrap(),
+            cli.check_positional::<String>(Positional::new("command"))
+                .unwrap(),
             Some("new".to_string())
         );
         assert_eq!(
-            cli.check_positional::<String>(Positional::new("ip")).unwrap(),
+            cli.check_positional::<String>(Positional::new("ip"))
+                .unwrap(),
             Some("rary.gates".to_string())
         );
         assert_eq!(
-            cli.check_positional::<i32>(Positional::new("path")).unwrap(),
+            cli.check_positional::<i32>(Positional::new("path"))
+                .unwrap(),
             None
         );
     }
@@ -1349,7 +1349,9 @@ mod test {
             "orbit", "--flag", "--rate=9", "command", "-r", "14",
         ]));
         assert_eq!(
-            cli.check_option::<i32>(Optional::new("rate").switch('r')).unwrap_err().kind(),
+            cli.check_option::<i32>(Optional::new("rate").switch('r'))
+                .unwrap_err()
+                .kind(),
             ErrorKind::DuplicateOptions
         );
 
@@ -1361,7 +1363,9 @@ mod test {
 
         let mut cli = Cli::new().tokenize(args(vec!["orbit", "--flag", "--rate", "--verbose"]));
         assert_eq!(
-            cli.check_option::<i32>(Optional::new("rate")).unwrap_err().kind(),
+            cli.check_option::<i32>(Optional::new("rate"))
+                .unwrap_err()
+                .kind(),
             ErrorKind::ExpectingValue
         );
 

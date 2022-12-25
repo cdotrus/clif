@@ -61,7 +61,7 @@ pub enum ErrorKind {
     UnknownSubcommand,
     BrokenRule,
     Help,
-    ExceedingMaxCount
+    ExceedingMaxCount,
 }
 
 impl<'a> Error<'a> {
@@ -85,15 +85,15 @@ impl<'a> Error<'a> {
         match self {
             Self::ExceedingMaxCount(_, _, _) => ErrorKind::ExceedingMaxCount,
             Self::Help(_) => ErrorKind::Help,
-            Self::SuggestArg(_, _) =>ErrorKind::SuggestArg,
-            Self::SuggestSubcommand(_, _) =>ErrorKind::SuggestSubcommand,
+            Self::SuggestArg(_, _) => ErrorKind::SuggestArg,
+            Self::SuggestSubcommand(_, _) => ErrorKind::SuggestSubcommand,
             Self::OutOfContextArgSuggest(_, _, _) => ErrorKind::OutOfContextArgSuggest,
             Self::BadType(_, _, _, _) => ErrorKind::BadType,
             Self::MissingPositional(_, _) => ErrorKind::MissingPositional,
             Self::DuplicateOptions(_, _) => ErrorKind::DuplicateOptions,
             Self::ExpectingValue(_, _) => ErrorKind::ExpectingValue,
             Self::UnexpectedValue(_, _) => ErrorKind::UnexpectedValue,
-            Self::UnexpectedArg(_, _) =>ErrorKind::UnexpectedArg,
+            Self::UnexpectedArg(_, _) => ErrorKind::UnexpectedArg,
             Self::UnknownSubcommand(_, _, _) => ErrorKind::UnknownSubcommand,
             Self::BrokenRule(_) => ErrorKind::BrokenRule,
         }

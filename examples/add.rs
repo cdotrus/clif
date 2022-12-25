@@ -1,11 +1,11 @@
 use colored::*;
 use std::env::args;
 
+use cliprs::arg::*;
+use cliprs::cmd::{Command, FromCli, Runner};
 use cliprs::Cli;
 use cliprs::Error;
 use cliprs::Help;
-use cliprs::arg::*;
-use cliprs::cmd::{Command, FromCli, Runner};
 
 fn main() {
     std::process::exit(go() as i32)
@@ -67,7 +67,7 @@ impl FromCli for Addrs {
             match e.kind() {
                 std::io::ErrorKind::NotFound => {
                     println!("{}", "here");
-                },
+                }
                 _ => (),
             }
             eprintln!("{}", e);
