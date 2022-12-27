@@ -1,11 +1,12 @@
 use colored::*;
 use std::env::args;
 
-use cliprs::arg::*;
-use cliprs::cmd::{Command, FromCli, Runner};
-use cliprs::Cli;
-use cliprs::Error;
-use cliprs::Help;
+use clif::arg::*;
+use clif::cmd::{Command, FromCli, Runner};
+use clif::Cli;
+use clif::Error;
+use clif::Help;
+use clif::ErrorContext;
 
 fn main() {
     std::process::exit(go() as i32)
@@ -14,7 +15,7 @@ fn main() {
 /// Glues the interface layer and backend logic for a smooth hand-off of data.
 fn go() -> u8 {
     // parse the command-line arguments
-    let mut cli = Cli::new().threshold(4).downplay_help().tokenize(args());
+    let mut cli = Cli::new().threshold(4).tokenize(args());
 
     match Addrs::from_cli(&mut cli) {
         // construct the application
@@ -26,11 +27,43 @@ fn go() -> u8 {
         Err(err) => {
             match err.as_quick_help() {
                 Some(text) => println!("{}", text),
-                None => eprintln!("{} {}", "error:".red().bold(), err),
+                None => {
+                    eprintln!("{}: {}", "error".red().bold(), colorize_error_message(&err))
+                }
             }
             err.code()
         }
     }
+}
+
+fn colorize_error_message(err: &clif::Error) -> String {
+    // detect the relevant information to highlight
+    let mut words = Vec::new();
+    match &err.context() {
+        &ErrorContext::FailedArg(arg) => { 
+            words.push((
+                arg.to_string(),
+                arg.to_string().yellow().to_string()
+            ));
+        },
+        &ErrorContext::SuggestWord(word, suggest) => {
+            words.push((
+                word.to_string(),
+                word.to_string().yellow().to_string()
+            ));
+            words.push((
+                suggest.to_string(),
+                suggest.to_string().green().to_string()
+            ));
+        }
+        _ => (),
+    };
+
+    let mut message = err.to_string();
+    words.into_iter().for_each(|(old, new)| {
+        message = message.replace(&old, &new)
+    });
+    message
 }
 
 /// `Addrs` is 'add-rust' that can add two unsigned 8-bit values together.
@@ -63,15 +96,15 @@ impl FromCli for Addrs {
 
         // println!("{}", t.get_name_ref());
 
-        if let Err(e) = std::fs::File::open("hello world") {
-            match e.kind() {
-                std::io::ErrorKind::NotFound => {
-                    println!("{}", "here");
-                }
-                _ => (),
-            }
-            eprintln!("{}", e);
-        }
+        // if let Err(e) = std::fs::File::open("hello world") {
+        //     match e.kind() {
+        //         std::io::ErrorKind::NotFound => {
+        //             println!("{}", "here");
+        //         }
+        //         _ => (),
+        //     }
+        //     eprintln!("{}", e);
+        // }
 
         // set short help text in case of an error
         cli.help(
@@ -83,7 +116,7 @@ impl FromCli for Addrs {
         let radd = Addrs {
             verbose: cli.check_flag(Flag::new("verbose"))?,
             count: cli
-                .check_option_n(Optional::new("count").switch('c'), 3)?
+                .check_option_n(Optional::new("count").switch('c').value("n"), 3)?
                 .unwrap_or(vec![]),
             lhs: cli.require_positional(Positional::new("lhs"))?,
             rhs: cli.require_positional(Positional::new("rhs"))?,

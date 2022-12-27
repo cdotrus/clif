@@ -1,6 +1,6 @@
 use crate::arg::*;
 use crate::command::FromCli;
-use crate::error::Error;
+use crate::error::{Error, ErrorContext, ErrorKind};
 use crate::help::Help;
 use crate::seqalin;
 use crate::seqalin::Cost;
@@ -224,7 +224,7 @@ impl<'c> Cli<'c> {
             && self.asking_for_help == true
             && self.is_help_enabled() == true
         {
-            Err(Error::Help(self.help.clone()))
+            Err(Error::new(self.help.clone(), ErrorKind::Help, ErrorContext::Help))
         } else {
             Ok(())
         }
@@ -291,39 +291,45 @@ impl<'c> Cli<'c> {
                 _ => None,
             })
             .expect("an unattached argument must exist before calling `match_command`");
-        let s = self
+        let command = self
             .next_uarg()
             .expect("`check_command` must be called before this function");
         // perform partial clean to ensure no arguments are remaining behind the command (uncaught options)
         let ooc_arg = self.capture_bad_flag(i)?;
 
-        if words.iter().find(|p| p.as_ref() == s).is_some() {
+        if words.iter().find(|p| p.as_ref() == command).is_some() {
             if let Some((prefix, key, pos)) = ooc_arg {
                 if pos < i {
                     self.prioritize_help()?;
-                    return Err(Error::OutOfContextArgSuggest(
-                        format!("{}{}", prefix, key),
-                        s,
-                        self.help.clone(),
+                    return Err(Error::new(
+                        self.help.clone(), 
+                        ErrorKind::OutOfContextArgSuggest, 
+                        ErrorContext::OutofContextArgSuggest(
+                            format!("{}{}", prefix, key),
+                            command
+                        ),
                     ));
                 }
             }
-            Ok(s)
+            Ok(command)
         // try to offer a spelling suggestion otherwise say we've hit an unexpected argument
         } else {
             // bypass sequence alignment algorithm if threshold == 0
             if let Some(w) = if self.threshold > 0 {
-                seqalin::sel_min_edit_str(&s, &words, self.threshold)
+                seqalin::sel_min_edit_str(&command, &words, self.threshold)
             } else {
                 None
             } {
-                Err(Error::SuggestSubcommand(s, w.to_string()))
+                Err(Error::new(self.help.clone(), ErrorKind::SuggestSubcommand, ErrorContext::SuggestWord(command, w.to_string())))
             } else {
                 self.prioritize_help()?;
-                Err(Error::UnknownSubcommand(
-                    self.known_args.pop().expect("requires positional argument"),
-                    s,
-                    self.help.clone(),
+                Err(Error::new(
+                    self.help.clone(), 
+                    ErrorKind::UnknownSubcommand, 
+                    ErrorContext::UnknownSubcommand(
+                        self.known_args.pop().expect("requires positional argument"),
+                        command,
+                    )
                 ))
             }
         }
@@ -341,16 +347,19 @@ impl<'c> Cli<'c> {
     {
         self.known_args.push(Arg::Positional(p));
         match self.next_uarg() {
-            Some(s) => match s.parse::<T>() {
+            Some(word) => match word.parse::<T>() {
                 Ok(r) => Ok(Some(r)),
-                Err(e) => {
+                Err(err) => {
                     self.prioritize_help()?;
                     self.prioritize_suggestion()?;
-                    Err(Error::BadType(
-                        self.known_args.pop().unwrap(),
-                        s,
-                        Box::new(e),
-                        self.help.clone(),
+                    Err(Error::new(
+                        self.help.clone(), 
+                        ErrorKind::BadType, 
+                        ErrorContext::FailedCast(
+                            self.known_args.pop().unwrap(),
+                            word,
+                            Box::new(err),
+                        )
                     ))
                 }
             },
@@ -370,9 +379,12 @@ impl<'c> Cli<'c> {
         } else {
             self.prioritize_help()?;
             self.is_empty()?;
-            Err(Error::MissingPositional(
-                self.known_args.pop().unwrap(),
-                self.help.clone(),
+            Err(Error::new(
+                self.help.clone(), 
+                ErrorKind::MissingPositional, 
+                ErrorContext::FailedArg(
+                    self.known_args.pop().unwrap(),
+                )
             ))
         }
     }
@@ -397,9 +409,13 @@ impl<'c> Cli<'c> {
                     } else {
                         None
                     } {
-                        Some(Error::SuggestArg(
-                            format!("{}{}", symbol::FLAG, f.0),
-                            format!("{}{}", symbol::FLAG, word),
+                        Some(Error::new(
+                            self.help.clone(), 
+                            ErrorKind::SuggestArg, 
+                            ErrorContext::SuggestWord(
+                                format!("{}{}", symbol::FLAG, f.0),
+                                format!("{}{}", symbol::FLAG, word),
+                            )
                         ))
                     } else {
                         None
@@ -433,34 +449,43 @@ impl<'c> Cli<'c> {
         let mut values = self.pull_flag(locs, true);
         match values.len() {
             1 => {
-                if let Some(s) = values.pop().unwrap() {
-                    let result = s.parse::<T>();
+                if let Some(word) = values.pop().unwrap() {
+                    let result = word.parse::<T>();
                     match result {
                         Ok(r) => Ok(Some(r)),
-                        Err(e) => {
+                        Err(err) => {
                             self.prioritize_help()?;
-                            Err(Error::BadType(
-                                self.known_args.pop().unwrap(),
-                                s,
-                                Box::new(e),
-                                self.help.clone(),
+                            Err(Error::new(
+                                self.help.clone(), 
+                                ErrorKind::BadType, 
+                                ErrorContext::FailedCast(
+                                    self.known_args.pop().unwrap(),
+                                    word,
+                                    Box::new(err),
+                                )
                             ))
                         }
                     }
                 } else {
                     self.prioritize_help()?;
-                    Err(Error::ExpectingValue(
-                        self.known_args.pop().unwrap(),
-                        self.help.clone(),
+                    Err(Error::new(
+                        self.help.clone(), 
+                        ErrorKind::ExpectingValue, 
+                        ErrorContext::FailedArg(
+                            self.known_args.pop().unwrap(),
+                        )
                     ))
                 }
             }
             0 => Ok(None),
             _ => {
                 self.prioritize_help()?;
-                Err(Error::DuplicateOptions(
-                    self.known_args.pop().unwrap(),
-                    self.help.clone(),
+                Err(Error::new(
+                    self.help.clone(), 
+                    ErrorKind::DuplicateOptions, 
+                    ErrorContext::FailedArg(
+                        self.known_args.pop().unwrap(),
+                    )
                 ))
             }
         }
@@ -482,10 +507,14 @@ impl<'c> Cli<'c> {
             // verify the size of the vector does not exceed `n`
             Some(r) => match r.len() <= n {
                 true => Ok(Some(r)),
-                false => Err(Error::ExceedingMaxCount(
-                    n,
-                    r.len(),
-                    self.known_args.pop().unwrap(),
+                false => Err(Error::new(
+                    self.help.clone(), 
+                    ErrorKind::ExceedingMaxCount, 
+                    ErrorContext::ExceededThreshold(
+                        self.known_args.pop().unwrap(),
+                        r.len(),
+                        n,
+                    )
                 )),
             },
             None => Ok(None),
@@ -516,25 +545,31 @@ impl<'c> Cli<'c> {
         // try to convert each value into the type T
         let mut transform = Vec::<T>::with_capacity(values.len());
         for val in values {
-            if let Some(s) = val {
-                let result = s.parse::<T>();
+            if let Some(word) = val {
+                let result = word.parse::<T>();
                 match result {
                     Ok(r) => transform.push(r),
-                    Err(e) => {
+                    Err(err) => {
                         self.prioritize_help()?;
-                        return Err(Error::BadType(
-                            self.known_args.pop().unwrap(),
-                            s,
-                            Box::new(e),
-                            self.help.clone(),
+                        return Err(Error::new(
+                            self.help.clone(), 
+                            ErrorKind::BadType, 
+                            ErrorContext::FailedCast(
+                                self.known_args.pop().unwrap(),
+                                word,
+                                Box::new(err),
+                            )
                         ));
                     }
                 }
             } else {
                 self.prioritize_help()?;
-                return Err(Error::ExpectingValue(
-                    self.known_args.pop().unwrap(),
-                    self.help.clone(),
+                return Err(Error::new(
+                    self.help.clone(), 
+                    ErrorKind::ExpectingValue, 
+                    ErrorContext::FailedArg(
+                        self.known_args.pop().unwrap(),
+                    )
                 ));
             }
         }
@@ -549,9 +584,12 @@ impl<'c> Cli<'c> {
         match occurences > 1 {
             true => {
                 self.prioritize_help()?;
-                Err(Error::DuplicateOptions(
-                    self.known_args.pop().unwrap(),
-                    self.help.clone(),
+                Err(Error::new(
+                    self.help.clone(), 
+                    ErrorKind::DuplicateOptions, 
+                    ErrorContext::FailedArg(
+                        self.known_args.pop().unwrap(),
+                    )
                 ))
             }
             // the flag was either raised once or not at all
@@ -574,9 +612,13 @@ impl<'c> Cli<'c> {
         // verify there are no values attached to this flag
         if let Some(val) = occurences.iter_mut().find(|p| p.is_some()) {
             self.prioritize_help()?;
-            return Err(Error::UnexpectedValue(
-                self.known_args.pop().unwrap(),
-                val.take().unwrap(),
+            return Err(Error::new(
+                self.help.clone(), 
+                ErrorKind::UnexpectedValue, 
+                ErrorContext::UnexpectedValue(
+                    self.known_args.pop().unwrap(),
+                    val.take().unwrap(),
+                )
             ));
         } else {
             let raised = occurences.len() != 0;
@@ -608,10 +650,14 @@ impl<'c> Cli<'c> {
         // verify the size of the vector does not exceed `n`
         match occurences <= n {
             true => Ok(occurences),
-            false => Err(Error::ExceedingMaxCount(
-                n,
-                occurences,
-                self.known_args.pop().unwrap(),
+            false => Err(Error::new(
+                self.help.clone(), 
+                ErrorKind::ExceedingMaxCount, 
+                ErrorContext::ExceededThreshold(
+                    self.known_args.pop().unwrap(),
+                    occurences,
+                    n,
+                )
             )),
         }
     }
@@ -662,14 +708,18 @@ impl<'c> Cli<'c> {
                     Token::Flag(_) => {
                         // try to match it with a valid flag from word bank
                         let bank = self.known_args_as_flag_names();
-                        if let Some(s) = if self.threshold > 0 {
+                        if let Some(closest) = if self.threshold > 0 {
                             seqalin::sel_min_edit_str(key, &bank, self.threshold)
                         } else {
                             None
                         } {
-                            return Err(Error::SuggestArg(
-                                format!("{}{}", symbol::FLAG, key),
-                                format!("{}{}", symbol::FLAG, s),
+                            return Err(Error::new(
+                                self.help.clone(), 
+                                ErrorKind::SuggestArg, 
+                                ErrorContext::SuggestWord(
+                                    format!("{}{}", symbol::FLAG, key),
+                                    format!("{}{}", symbol::FLAG, closest),
+                                )
                             ));
                         }
                         symbol::FLAG
@@ -692,20 +742,34 @@ impl<'c> Cli<'c> {
         self.prioritize_help()?;
         // check if map is empty, and return the minimum found index.
         if let Some((prefix, key, _)) = self.capture_bad_flag(self.tokens.len())? {
-            Err(Error::UnexpectedArg(
-                format!("{}{}", prefix, key),
-                self.help.clone(),
+            Err(Error::new(
+                self.help.clone(), 
+                ErrorKind::UnexpectedArg, 
+                ErrorContext::UnexpectedArg(
+                    format!("{}{}", prefix, key)
+                )
             ))
         // find first non-none token
         } else if let Some(t) = self.tokens.iter().find(|p| p.is_some()) {
             match t {
-                Some(Token::UnattachedArgument(_, s)) => {
-                    Err(Error::UnexpectedArg(s.to_string(), self.help.clone()))
+                Some(Token::UnattachedArgument(_, word)) => {
+                    Err(Error::new(
+                        self.help.clone(), 
+                        ErrorKind::UnexpectedArg, 
+                        ErrorContext::UnexpectedArg(
+                            word.to_string()
+                        )
+                    ))
                 }
-                Some(Token::Terminator(_)) => Err(Error::UnexpectedArg(
-                    symbol::FLAG.to_string(),
-                    self.help.clone(),
-                )),
+                Some(Token::Terminator(_)) => {
+                    Err(Error::new(
+                        self.help.clone(), 
+                        ErrorKind::UnexpectedArg, 
+                        ErrorContext::UnexpectedArg(
+                            symbol::FLAG.to_string()
+                        )
+                    ))
+                }
                 _ => panic!("no other tokens types should be left"),
             }
         } else {
@@ -764,9 +828,13 @@ impl<'c> Cli<'c> {
                         None
                     }
                     Some(Token::Ignore(_, _)) => Some(Ok(tkn.take().unwrap().take_str())),
-                    Some(Token::AttachedArgument(_, _)) => Some(Err(Error::UnexpectedValue(
-                        Arg::Flag(Flag::new("")),
-                        tkn.take().unwrap().take_str(),
+                    Some(Token::AttachedArgument(_, _)) => Some(Err(Error::new(
+                        self.help.clone(), 
+                        ErrorKind::UnexpectedValue, 
+                        ErrorContext::UnexpectedValue(
+                            Arg::Flag(Flag::new("")),
+                            tkn.take().unwrap().take_str(),
+                        )
                     ))),
                     _ => panic!("no other tokens should exist beyond terminator {:?}", tkn),
                 }

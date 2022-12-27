@@ -1,9 +1,8 @@
-# `cliprs`
+# `clif`
 
-## A lightweight and flexible command-line argument parser written in Rust.
+### A lightweight and effective Command-Line Interface Framework.
 
-
-### Features
+## Features
 - supports switches replacing flags/options
     - `--version`
     - `-v`
@@ -25,13 +24,13 @@
 - option to disable help flag (`--help`, `-h`) to be recognized as unknown flag
 
 
-### Description
+## Description
 
 Arguments are learned as-they-go: the cli parser learns each argument upon checking it. For this reason, it is recommended to parse all flags and options before any positionals or subcommands.
 
 For a type to be accepted by the command-line it must implement the `FromStr` trait.
 
 
-### Examples
+## Examples
 
 See the [examples/](./examples/) folder.

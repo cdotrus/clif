@@ -9,6 +9,7 @@ pub mod arg;
 pub use cli::Cli;
 pub use error::Error;
 pub use error::ErrorKind;
+pub use error::ErrorContext;
 pub use help::Help;
 
 pub mod cmd {

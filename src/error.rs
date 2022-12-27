@@ -1,6 +1,5 @@
 use crate::arg::Arg;
 use crate::help::Help;
-use colored::*;
 use std::fmt::Display;
 
 mod exit_code {
@@ -11,43 +10,77 @@ mod exit_code {
 type Value = String;
 type Subcommand = String;
 type Suggestion = String;
-type PrevCommand = String;
 type MaxCount = usize;
 type CurCount = usize;
 type Argument = String;
-type Helper<'a> = Option<Help<'a>>;
 
 #[derive(Debug)]
-pub enum Error<'a> {
-    /// argument, value, error message
-    BadType(Arg<'a>, Value, Box<dyn std::error::Error>, Helper<'a>),
-    /// argument, help
-    MissingPositional(Arg<'a>, Helper<'a>),
-    /// argument
-    DuplicateOptions(Arg<'a>, Helper<'a>),
-    /// argument
-    ExpectingValue(Arg<'a>, Helper<'a>),
-    /// argument, value
-    UnexpectedValue(Arg<'a>, Value),
-    /// argument, subcommand
-    OutOfContextArgSuggest(Argument, Subcommand, Helper<'a>),
-    /// argument
-    UnexpectedArg(Argument, Helper<'a>),
-    /// argument, suggestion
-    SuggestArg(Argument, Suggestion),
-    /// subcommand, suggestion
-    SuggestSubcommand(Subcommand, Suggestion),
-    /// argument, previous command
-    UnknownSubcommand(Arg<'a>, PrevCommand, Helper<'a>),
-    /// error message
-    BrokenRule(Box<dyn std::error::Error>),
-    /// quick help text
-    Help(Helper<'a>),
-    /// n, incorrect size, argument
-    ExceedingMaxCount(MaxCount, CurCount, Arg<'a>),
+pub struct Error<'a> {
+    context: ErrorContext<'a>,
+    help: Option<Help<'a>>,
+    kind: ErrorKind,
 }
 
-#[derive(Debug, PartialEq)]
+impl<'a> Error<'a> {
+    /// Creates a new error.
+    pub fn new(help: Option<Help<'a>>, kind: ErrorKind, context: ErrorContext<'a>) -> Self {
+        Self {
+            help: help,
+            kind: kind,
+            context: context,
+        }
+    }
+
+    /// Casts the error to the quick help message if the error is for requesting help.
+    pub fn as_quick_help(&self) -> Option<&str> {
+        match &self.kind {
+            ErrorKind::Help => Some(self.help.as_ref()?.get_quick_text()),
+            _ => None,
+        }
+    }
+
+    // Returns the kind of error.
+    pub fn kind(&self) -> ErrorKind {
+        self.kind
+    }
+
+    /// Returns `OKAY_CODE` for help error and `BAD_CODE` otherwise.
+    pub fn code(&self) -> u8 {
+        match &self.kind {
+            ErrorKind::Help => exit_code::OKAY,
+            _ => exit_code::BAD,
+        }
+    }
+
+    /// References the surrounding structs for the given error.
+    pub fn context(&self) -> &ErrorContext {
+        &self.context
+    }
+
+    /// Constructs a simple help tip to insert into an error message if help exists.
+    pub fn help_tip(&self) -> Option<String> {
+        Some(format!("\n\nFor more information try {}", self.help.as_ref()?.get_flag()))
+    }
+}
+
+type ParseError = Box<dyn std::error::Error>;
+
+#[derive(Debug)]
+#[allow(dead_code)]
+pub enum ErrorContext<'a> {
+    ExceededThreshold(Arg<'a>, CurCount, MaxCount),
+    FailedArg(Arg<'a>),
+    UnexpectedValue(Arg<'a>, Value),
+    FailedCast(Arg<'a>, Value, ParseError),
+    OutofContextArgSuggest(Argument, Subcommand),
+    UnexpectedArg(Argument),
+    SuggestWord(String, Suggestion),
+    UnknownSubcommand(Arg<'a>, Subcommand),
+    BrokenRule(ParseError),
+    Help,
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum ErrorKind {
     BadType,
     MissingPositional,
@@ -64,38 +97,22 @@ pub enum ErrorKind {
     ExceedingMaxCount,
 }
 
-impl<'a> Error<'a> {
-    /// Returns `OKAY_CODE` for help error and `BAD_CODE` otherwise.
-    pub fn code(&self) -> u8 {
-        match &self {
-            Self::Help(_) => exit_code::OKAY,
-            _ => exit_code::BAD,
-        }
-    }
-
-    /// Casts the error to the quick help message if the error is for requesting help.
-    pub fn as_quick_help(&self) -> Option<&str> {
-        match &self {
-            Self::Help(h) => Some(h.as_ref()?.get_quick_text()),
-            _ => None,
-        }
-    }
-
-    pub fn kind(&self) -> ErrorKind {
+impl Display for ErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ExceedingMaxCount(_, _, _) => ErrorKind::ExceedingMaxCount,
-            Self::Help(_) => ErrorKind::Help,
-            Self::SuggestArg(_, _) => ErrorKind::SuggestArg,
-            Self::SuggestSubcommand(_, _) => ErrorKind::SuggestSubcommand,
-            Self::OutOfContextArgSuggest(_, _, _) => ErrorKind::OutOfContextArgSuggest,
-            Self::BadType(_, _, _, _) => ErrorKind::BadType,
-            Self::MissingPositional(_, _) => ErrorKind::MissingPositional,
-            Self::DuplicateOptions(_, _) => ErrorKind::DuplicateOptions,
-            Self::ExpectingValue(_, _) => ErrorKind::ExpectingValue,
-            Self::UnexpectedValue(_, _) => ErrorKind::UnexpectedValue,
-            Self::UnexpectedArg(_, _) => ErrorKind::UnexpectedArg,
-            Self::UnknownSubcommand(_, _, _) => ErrorKind::UnknownSubcommand,
-            Self::BrokenRule(_) => ErrorKind::BrokenRule,
+            Self::BadType => write!(f, ""),
+            Self::MissingPositional => write!(f, "Missing positional argument"),
+            Self::DuplicateOptions => write!(f, "More than one argument is supplied to option"),
+            Self::ExpectingValue => write!(f, ""),
+            Self::UnexpectedValue => write!(f, ""),
+            Self::OutOfContextArgSuggest => write!(f, ""),
+            Self::UnexpectedArg => write!(f, ""),
+            Self::SuggestArg => write!(f, ""),
+            Self::SuggestSubcommand => write!(f, ""),
+            Self::UnknownSubcommand => write!(f, "Unknown subcommand"),
+            Self::BrokenRule => write!(f, ""),
+            Self::Help => write!(f, ""),
+            Self::ExceedingMaxCount => write!(f, ""),
         }
     }
 }
@@ -104,37 +121,62 @@ impl<'a> std::error::Error for Error<'a> {}
 
 impl<'a> Display for Error<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        // body
-        match self {
-            Self::ExceedingMaxCount(n, s, o) => write!(f, "option '{}' was requested {} times, but cannot exceed {}", o, s, n),
-            Self::Help(h) => write!(f, "{}", h.as_ref().unwrap_or(&Help::new()).get_quick_text()),
-            Self::SuggestArg(a, sug) => write!(f, "unknown argument '{}'\n\nDid you mean {}?", a.yellow(), sug.green()),
-            Self::SuggestSubcommand(a, sug) => write!(f, "unknown subcommand '{}'\n\nDid you mean {}?", a.yellow(), sug.green()),
-            Self::OutOfContextArgSuggest(o, cmd, _) => write!(f, "argument '{}' is unknown or invalid in the current context\n\nMaybe move it after '{}'?", o.yellow(), cmd.green()),
-            Self::BadType(a, v, e, _) => write!(f, "argument '{}' did not process '{}' due to {}", a.to_string().yellow(), v.blue(), e),
-            Self::MissingPositional(p, help) => write!(f, "missing required argument '{}'{}", p, match help.as_ref().unwrap_or(&Help::new()).get_usage() { Some(m) => { "\n\n".to_owned() + m } None => { "".to_owned() } }),
-            Self::DuplicateOptions(o, _) => write!(f, "option '{}' was requested more than once, but can only be supplied once", o.to_string().yellow()),
-            Self::ExpectingValue(x, _) => write!(f, "option '{}' expects a value but none was supplied", x.to_string().yellow()),
-            Self::UnexpectedValue(x, s) => write!(f, "flag '{}' cannot accept values but one was supplied \"{}\"", x.to_string().yellow(), s),
-            Self::UnexpectedArg(s, _) => write!(f, "unknown argument '{}'", s.yellow()),
-            Self::UnknownSubcommand(c, a, _) => write!(f, "'{}' is not a valid subcommand for {}", a, c.to_string().yellow()),
-            Self::BrokenRule(r) => write!(f, "a rule conflict occurred from {}", r),
-        }?;
-        // footer
-        match self {
-            Self::OutOfContextArgSuggest(_, _, he)
-            | Self::BadType(_, _, _, he)
-            | Self::MissingPositional(_, he)
-            | Self::DuplicateOptions(_, he)
-            | Self::ExpectingValue(_, he)
-            | Self::UnexpectedArg(_, he)
-            | Self::UnknownSubcommand(_, _, he) => {
-                if let Some(help) = he {
-                    write!(f, "\n\nFor more information try {}", help.get_flag())?
+
+        match self.context() {
+            ErrorContext::ExceededThreshold(arg, cur, max) => {
+                write!(f, "option '{}' was requested {} times, but cannot exceed {}", arg.to_string(), cur, max)
+            },
+            ErrorContext::Help => {
+                write!(f, "{}", self.help.as_ref().unwrap_or(&Help::new()).get_quick_text())
+            },
+            ErrorContext::FailedCast(arg, val, err) => {
+                write!(f, "argument '{}' did not process '{}' due to {}", arg.to_string(), val, err)
+            },
+            ErrorContext::FailedArg(arg) => {
+                match self.kind() {
+                    ErrorKind::MissingPositional => {
+                        let usage = match self.help.as_ref().unwrap_or(&Help::new()).get_usage() { 
+                            Some(m) => { "\n\n".to_owned() + m } 
+                            None => { "".to_owned() } 
+                        };
+                        write!(f, "missing required argument '{}'{}", arg.to_string(), usage)
+                    },
+                    ErrorKind::DuplicateOptions => {
+                        write!(f, "option '{}' was requested more than once, but can only be supplied once", arg.to_string())
+                    },
+                    ErrorKind::ExpectingValue => {
+                        write!(f, "option '{}' expects a value but none was supplied", arg.to_string())
+                    },
+                    _ => panic!("reached unreachable error kind for a failed argument error context"),
                 }
-            }
-            _ => (),
-        }
+            },
+            ErrorContext::SuggestWord(word, suggestion) => {
+                match self.kind() {
+                    ErrorKind::SuggestArg => {
+                        write!(f, "unknown argument '{}'\n\nDid you mean {}?", word, suggestion)
+                    },
+                    ErrorKind::SuggestSubcommand => {
+                        write!(f, "unknown subcommand '{}'\n\nDid you mean {}?", word, suggestion)
+                    },
+                    _ => panic!("reached unreachable error kind for a failed argument error context"),
+                }
+            },
+            ErrorContext::OutofContextArgSuggest(arg, subcommand) => {
+                write!(f, "argument '{}' is unknown or invalid in the current context\n\nMaybe move it after '{}'?", arg, subcommand)
+            },
+            ErrorContext::UnexpectedValue(flag, val) => {
+                write!(f, "flag '{}' cannot accept values but one was supplied '{}'", flag.to_string(), val)
+            },
+            ErrorContext::UnexpectedArg(word) => {
+                write!(f, "unknown argument '{}'", word)
+            },
+            ErrorContext::UnknownSubcommand(arg, subcommand) => {
+                write!(f, "'{}' is not a valid subcommand for {}", subcommand, arg.to_string())
+            },
+            ErrorContext::BrokenRule(err) => {
+                write!(f, "a rule conflict occurred due to {}", err)
+            },
+        }?;
         Ok(())
     }
 }
