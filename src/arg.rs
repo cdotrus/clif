@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::fmt::Debug;
 
 mod symbol {
     pub const FLAG: &str = "--";
@@ -6,7 +7,7 @@ mod symbol {
     pub const POS_BRACKER_R: &str = ">";
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub enum Arg<'a> {
     Flag(Flag<'a>),
     Positional(Positional<'a>),
@@ -30,6 +31,12 @@ impl<'a> Display for Arg<'a> {
             Arg::Positional(a) => write!(f, "{}", a),
             Arg::Optional(a) => write!(f, "{}", a),
         }
+    }
+}
+
+impl<'a> Debug for Arg<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "'{}'", self.to_string())
     }
 }
 

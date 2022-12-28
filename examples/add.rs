@@ -1,4 +1,4 @@
-use colored::*;
+use crayon::*;
 use std::env::args;
 
 use clif::arg::*;
@@ -6,7 +6,6 @@ use clif::cmd::{Command, FromCli, Runner};
 use clif::Cli;
 use clif::Error;
 use clif::Help;
-use clif::ErrorContext;
 
 fn main() {
     std::process::exit(go() as i32)
@@ -15,7 +14,7 @@ fn main() {
 /// Glues the interface layer and backend logic for a smooth hand-off of data.
 fn go() -> u8 {
     // parse the command-line arguments
-    let mut cli = Cli::new().threshold(4).tokenize(args());
+    let mut cli = Cli::new().threshold(2).tokenize(args());
 
     match Addrs::from_cli(&mut cli) {
         // construct the application
@@ -27,43 +26,11 @@ fn go() -> u8 {
         Err(err) => {
             match err.as_quick_help() {
                 Some(text) => println!("{}", text),
-                None => {
-                    eprintln!("{}: {}", "error".red().bold(), colorize_error_message(&err))
-                }
+                None => eprintln!("{}: {}", "error".red().bold(), &err),
             }
             err.code()
         }
     }
-}
-
-fn colorize_error_message(err: &clif::Error) -> String {
-    // detect the relevant information to highlight
-    let mut words = Vec::new();
-    match &err.context() {
-        &ErrorContext::FailedArg(arg) => { 
-            words.push((
-                arg.to_string(),
-                arg.to_string().yellow().to_string()
-            ));
-        },
-        &ErrorContext::SuggestWord(word, suggest) => {
-            words.push((
-                word.to_string(),
-                word.to_string().yellow().to_string()
-            ));
-            words.push((
-                suggest.to_string(),
-                suggest.to_string().green().to_string()
-            ));
-        }
-        _ => (),
-    };
-
-    let mut message = err.to_string();
-    words.into_iter().for_each(|(old, new)| {
-        message = message.replace(&old, &new)
-    });
-    message
 }
 
 /// `Addrs` is 'add-rust' that can add two unsigned 8-bit values together.

@@ -97,26 +97,6 @@ pub enum ErrorKind {
     ExceedingMaxCount,
 }
 
-impl Display for ErrorKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::BadType => write!(f, ""),
-            Self::MissingPositional => write!(f, "Missing positional argument"),
-            Self::DuplicateOptions => write!(f, "More than one argument is supplied to option"),
-            Self::ExpectingValue => write!(f, ""),
-            Self::UnexpectedValue => write!(f, ""),
-            Self::OutOfContextArgSuggest => write!(f, ""),
-            Self::UnexpectedArg => write!(f, ""),
-            Self::SuggestArg => write!(f, ""),
-            Self::SuggestSubcommand => write!(f, ""),
-            Self::UnknownSubcommand => write!(f, "Unknown subcommand"),
-            Self::BrokenRule => write!(f, ""),
-            Self::Help => write!(f, ""),
-            Self::ExceedingMaxCount => write!(f, ""),
-        }
-    }
-}
-
 impl<'a> std::error::Error for Error<'a> {}
 
 impl<'a> Display for Error<'a> {
@@ -124,13 +104,13 @@ impl<'a> Display for Error<'a> {
 
         match self.context() {
             ErrorContext::ExceededThreshold(arg, cur, max) => {
-                write!(f, "option '{}' was requested {} times, but cannot exceed {}", arg.to_string(), cur, max)
+                write!(f, "option '{}' can be used up to {} times but was supplied {} times", arg.to_string(), max, cur)
             },
             ErrorContext::Help => {
                 write!(f, "{}", self.help.as_ref().unwrap_or(&Help::new()).get_quick_text())
             },
             ErrorContext::FailedCast(arg, val, err) => {
-                write!(f, "argument '{}' did not process '{}' due to {}", arg.to_string(), val, err)
+                write!(f, "argument '{}' failed to process '{}' due to: {}", arg.to_string(), val, err)
             },
             ErrorContext::FailedArg(arg) => {
                 match self.kind() {
@@ -139,13 +119,13 @@ impl<'a> Display for Error<'a> {
                             Some(m) => { "\n\n".to_owned() + m } 
                             None => { "".to_owned() } 
                         };
-                        write!(f, "missing required argument '{}'{}", arg.to_string(), usage)
+                        write!(f, "missing positional argument '{}'{}", arg.to_string(), usage)
                     },
                     ErrorKind::DuplicateOptions => {
-                        write!(f, "option '{}' was requested more than once, but can only be supplied once", arg.to_string())
+                        write!(f, "option '{}' can only be supplied 1 time", arg.to_string())
                     },
                     ErrorKind::ExpectingValue => {
-                        write!(f, "option '{}' expects a value but none was supplied", arg.to_string())
+                        write!(f, "option '{}' take 1 value but 0 was supplied", arg.to_string())
                     },
                     _ => panic!("reached unreachable error kind for a failed argument error context"),
                 }
@@ -153,10 +133,10 @@ impl<'a> Display for Error<'a> {
             ErrorContext::SuggestWord(word, suggestion) => {
                 match self.kind() {
                     ErrorKind::SuggestArg => {
-                        write!(f, "unknown argument '{}'\n\nDid you mean {}?", word, suggestion)
+                        write!(f, "unknown argument '{}'\n\nDid you mean '{}'?", word, suggestion)
                     },
                     ErrorKind::SuggestSubcommand => {
-                        write!(f, "unknown subcommand '{}'\n\nDid you mean {}?", word, suggestion)
+                        write!(f, "unknown subcommand '{}'\n\nDid you mean '{}'?", word, suggestion)
                     },
                     _ => panic!("reached unreachable error kind for a failed argument error context"),
                 }
@@ -165,16 +145,16 @@ impl<'a> Display for Error<'a> {
                 write!(f, "argument '{}' is unknown or invalid in the current context\n\nMaybe move it after '{}'?", arg, subcommand)
             },
             ErrorContext::UnexpectedValue(flag, val) => {
-                write!(f, "flag '{}' cannot accept values but one was supplied '{}'", flag.to_string(), val)
+                write!(f, "flag '{}' cannot accept a value but was given '{}'", flag.to_string(), val)
             },
             ErrorContext::UnexpectedArg(word) => {
                 write!(f, "unknown argument '{}'", word)
             },
             ErrorContext::UnknownSubcommand(arg, subcommand) => {
-                write!(f, "'{}' is not a valid subcommand for {}", subcommand, arg.to_string())
+                write!(f, "unknown subcommand '{}' for '{}'", subcommand, arg.to_string())
             },
             ErrorContext::BrokenRule(err) => {
-                write!(f, "a rule conflict occurred due to {}", err)
+                write!(f, "a rule conflict occurred due to: {}", err)
             },
         }?;
         Ok(())

@@ -5,11 +5,5 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[features]
-color = ["dep:colored"]
-
 [dependencies]
-colored = { version = "2", optional = true }
-
-[dev-dependencies]
-colored = "2"
+crayon = { git = "https://github.com/c-rus/crayon", tag = "0.1.0" }
