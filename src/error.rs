@@ -2,6 +2,8 @@ use crate::arg::Arg;
 use crate::help::Help;
 use std::fmt::Display;
 
+const NEW_PARAGRAPH: &str = "\n\n";
+
 mod exit_code {
     pub const BAD: u8 = 101;
     pub const OKAY: u8 = 0;
@@ -12,6 +14,7 @@ type Subcommand = String;
 type Suggestion = String;
 type MaxCount = usize;
 type CurCount = usize;
+type ParseError = Box<dyn std::error::Error>;
 type Argument = String;
 
 #[derive(Debug)]
@@ -59,11 +62,9 @@ impl<'a> Error<'a> {
 
     /// Constructs a simple help tip to insert into an error message if help exists.
     pub fn help_tip(&self) -> Option<String> {
-        Some(format!("\n\nFor more information try {}", self.help.as_ref()?.get_flag()))
+        Some(format!("{}For more information try '{}'.", NEW_PARAGRAPH, self.help.as_ref()?.get_flag()))
     }
 }
-
-type ParseError = Box<dyn std::error::Error>;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -116,7 +117,7 @@ impl<'a> Display for Error<'a> {
                 match self.kind() {
                     ErrorKind::MissingPositional => {
                         let usage = match self.help.as_ref().unwrap_or(&Help::new()).get_usage() { 
-                            Some(m) => { "\n\n".to_owned() + m } 
+                            Some(m) => { NEW_PARAGRAPH.to_owned() + m } 
                             None => { "".to_owned() } 
                         };
                         write!(f, "missing positional argument '{}'{}", arg.to_string(), usage)
@@ -133,16 +134,16 @@ impl<'a> Display for Error<'a> {
             ErrorContext::SuggestWord(word, suggestion) => {
                 match self.kind() {
                     ErrorKind::SuggestArg => {
-                        write!(f, "unknown argument '{}'\n\nDid you mean '{}'?", word, suggestion)
+                        write!(f, "unknown argument '{}'{}Did you mean '{}'?", word, NEW_PARAGRAPH, suggestion)
                     },
                     ErrorKind::SuggestSubcommand => {
-                        write!(f, "unknown subcommand '{}'\n\nDid you mean '{}'?", word, suggestion)
+                        write!(f, "unknown subcommand '{}'{}Did you mean '{}'?", word, NEW_PARAGRAPH, suggestion)
                     },
                     _ => panic!("reached unreachable error kind for a failed argument error context"),
                 }
             },
             ErrorContext::OutofContextArgSuggest(arg, subcommand) => {
-                write!(f, "argument '{}' is unknown or invalid in the current context\n\nMaybe move it after '{}'?", arg, subcommand)
+                write!(f, "argument '{}' is unknown or invalid in the current context{}Maybe move it after '{}'?", arg, NEW_PARAGRAPH, subcommand)
             },
             ErrorContext::UnexpectedValue(flag, val) => {
                 write!(f, "flag '{}' cannot accept a value but was given '{}'", flag.to_string(), val)
