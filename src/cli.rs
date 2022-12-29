@@ -72,6 +72,7 @@ pub struct Cli<'c> {
     asking_for_help: bool,
     prioritize_help: bool,
     threshold: Cost,
+    use_color: bool,
 }
 
 impl<'c> Cli<'c> {
@@ -85,6 +86,7 @@ impl<'c> Cli<'c> {
             asking_for_help: false,
             prioritize_help: true,
             threshold: 0,
+            use_color: true,
         }
     }
 
@@ -177,6 +179,23 @@ impl<'c> Cli<'c> {
         self
     }
 
+    /// Enables the coloring for error messages.
+    /// 
+    /// This is enabled by default. Note this function is not able to override
+    /// the crayon crate's color variable.
+    pub fn use_color(mut self) -> Self {
+        self.use_color = true;
+        self
+    }
+
+    /// Disables the coloring for error messages.
+    /// 
+    /// Note this function is only effective if the overall crayon crate's color is enabled.
+    pub fn disable_color(mut self) -> Self {
+        self.use_color = false;
+        self
+    }
+
     /// Sets the help `text` to display when detecting `--help, -h` on the command-line.
     ///
     /// If the help text has a line describing overall usage, you can specify it with `usage_line`.
@@ -224,7 +243,7 @@ impl<'c> Cli<'c> {
             && self.asking_for_help == true
             && self.is_help_enabled() == true
         {
-            Err(Error::new(self.help.clone(), ErrorKind::Help, ErrorContext::Help))
+            Err(Error::new(self.help.clone(), ErrorKind::Help, ErrorContext::Help, self.use_color))
         } else {
             Ok(())
         }
@@ -306,8 +325,9 @@ impl<'c> Cli<'c> {
                         ErrorKind::OutOfContextArgSuggest, 
                         ErrorContext::OutofContextArgSuggest(
                             format!("{}{}", prefix, key),
-                            command
+                            command,
                         ),
+                        self.use_color,
                     ));
                 }
             }
@@ -320,7 +340,7 @@ impl<'c> Cli<'c> {
             } else {
                 None
             } {
-                Err(Error::new(self.help.clone(), ErrorKind::SuggestSubcommand, ErrorContext::SuggestWord(command, w.to_string())))
+                Err(Error::new(self.help.clone(), ErrorKind::SuggestSubcommand, ErrorContext::SuggestWord(command, w.to_string()), self.use_color))
             } else {
                 self.prioritize_help()?;
                 Err(Error::new(
@@ -329,7 +349,8 @@ impl<'c> Cli<'c> {
                     ErrorContext::UnknownSubcommand(
                         self.known_args.pop().expect("requires positional argument"),
                         command,
-                    )
+                    ),
+                    self.use_color,
                 ))
             }
         }
@@ -372,7 +393,8 @@ impl<'c> Cli<'c> {
                             self.known_args.pop().unwrap(),
                             word,
                             Box::new(err),
-                        )
+                        ),
+                        self.use_color,
                     ))
                 }
             },
@@ -397,7 +419,8 @@ impl<'c> Cli<'c> {
                 ErrorKind::MissingPositional, 
                 ErrorContext::FailedArg(
                     self.known_args.pop().unwrap(),
-                )
+                ),
+                self.use_color,
             ))
         }
     }
@@ -445,7 +468,8 @@ impl<'c> Cli<'c> {
                             ErrorContext::SuggestWord(
                                 format!("{}{}", symbol::FLAG, f.0),
                                 format!("{}{}", symbol::FLAG, word),
-                            )
+                            ),
+                            self.use_color,
                         ))
                     } else {
                         None
@@ -492,7 +516,8 @@ impl<'c> Cli<'c> {
                                     self.known_args.pop().unwrap(),
                                     word,
                                     Box::new(err),
-                                )
+                                ),
+                                self.use_color,
                             ))
                         }
                     }
@@ -503,7 +528,8 @@ impl<'c> Cli<'c> {
                         ErrorKind::ExpectingValue, 
                         ErrorContext::FailedArg(
                             self.known_args.pop().unwrap(),
-                        )
+                        ),
+                        self.use_color,
                     ))
                 }
             }
@@ -515,7 +541,8 @@ impl<'c> Cli<'c> {
                     ErrorKind::DuplicateOptions, 
                     ErrorContext::FailedArg(
                         self.known_args.pop().unwrap(),
-                    )
+                    ), 
+                    self.use_color,
                 ))
             }
         }
@@ -544,7 +571,8 @@ impl<'c> Cli<'c> {
                         self.known_args.pop().unwrap(),
                         r.len(),
                         n,
-                    )
+                    ),
+                    self.use_color,
                 )),
             },
             None => Ok(None),
@@ -588,7 +616,8 @@ impl<'c> Cli<'c> {
                                 self.known_args.pop().unwrap(),
                                 word,
                                 Box::new(err),
-                            )
+                            ),
+                            self.use_color,
                         ));
                     }
                 }
@@ -599,7 +628,8 @@ impl<'c> Cli<'c> {
                     ErrorKind::ExpectingValue, 
                     ErrorContext::FailedArg(
                         self.known_args.pop().unwrap(),
-                    )
+                    ),
+                    self.use_color,
                 ));
             }
         }
@@ -619,7 +649,8 @@ impl<'c> Cli<'c> {
                     ErrorKind::DuplicateOptions, 
                     ErrorContext::FailedArg(
                         self.known_args.pop().unwrap(),
-                    )
+                    ),
+                    self.use_color,
                 ))
             }
             // the flag was either raised once or not at all
@@ -648,7 +679,8 @@ impl<'c> Cli<'c> {
                 ErrorContext::UnexpectedValue(
                     self.known_args.pop().unwrap(),
                     val.take().unwrap(),
-                )
+                ),
+                self.use_color,
             ));
         } else {
             let raised = occurences.len() != 0;
@@ -687,7 +719,8 @@ impl<'c> Cli<'c> {
                     self.known_args.pop().unwrap(),
                     occurences,
                     n,
-                )
+                ),
+                self.use_color,
             )),
         }
     }
@@ -749,7 +782,8 @@ impl<'c> Cli<'c> {
                                 ErrorContext::SuggestWord(
                                     format!("{}{}", symbol::FLAG, key),
                                     format!("{}{}", symbol::FLAG, closest),
-                                )
+                                ),
+                                self.use_color,
                             ));
                         }
                         symbol::FLAG
@@ -777,7 +811,8 @@ impl<'c> Cli<'c> {
                 ErrorKind::UnexpectedArg, 
                 ErrorContext::UnexpectedArg(
                     format!("{}{}", prefix, key)
-                )
+                ),
+                self.use_color,
             ))
         // find first non-none token
         } else if let Some(t) = self.tokens.iter().find(|p| p.is_some()) {
@@ -788,7 +823,8 @@ impl<'c> Cli<'c> {
                         ErrorKind::UnexpectedArg, 
                         ErrorContext::UnexpectedArg(
                             word.to_string()
-                        )
+                        ),
+                        self.use_color,
                     ))
                 }
                 Some(Token::Terminator(_)) => {
@@ -797,7 +833,8 @@ impl<'c> Cli<'c> {
                         ErrorKind::UnexpectedArg, 
                         ErrorContext::UnexpectedArg(
                             symbol::FLAG.to_string()
-                        )
+                        ),
+                        self.use_color,
                     ))
                 }
                 _ => panic!("no other tokens types should be left"),
@@ -864,7 +901,8 @@ impl<'c> Cli<'c> {
                         ErrorContext::UnexpectedValue(
                             Arg::Flag(Flag::new("")),
                             tkn.take().unwrap().take_str(),
-                        )
+                        ),
+                        self.use_color,
                     ))),
                     _ => panic!("no other tokens should exist beyond terminator {:?}", tkn),
                 }
