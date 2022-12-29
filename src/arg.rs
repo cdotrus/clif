@@ -40,7 +40,7 @@ impl<'a> Debug for Arg<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Positional<'a> {
     name: &'a str,
 }

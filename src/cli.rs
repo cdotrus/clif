@@ -337,7 +337,8 @@ impl<'c> Cli<'c> {
 
     /// Serves the next `Positional` value in the token stream parsed as `T`.
     ///
-    /// Errors if parsing fails.
+    /// Errors if parsing fails. If the next argument is not a positional, it will
+    /// not move forward in the token stream.
     pub fn check_positional<'a, T: FromStr>(
         &mut self,
         p: Positional<'c>,
@@ -346,6 +347,18 @@ impl<'c> Cli<'c> {
         <T as FromStr>::Err: 'static + std::error::Error,
     {
         self.known_args.push(Arg::Positional(p));
+        self.try_positional()
+    }
+
+    /// Attempts to extract the next unattached argument to get a positional with valid parsing.
+    /// 
+    /// Assumes the [Positional] argument is already added as the last element to the `known_args` vector.
+    fn try_positional<'a, T: FromStr>(
+        &mut self,
+    ) -> Result<Option<T>, Error<'c>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
         match self.next_uarg() {
             Some(word) => match word.parse::<T>() {
                 Ok(r) => Ok(Some(r)),
@@ -367,7 +380,7 @@ impl<'c> Cli<'c> {
         }
     }
 
-    /// Forces the next `Positional to exist from token stream.
+    /// Forces the next [Positional] to exist from token stream.
     ///
     /// Errors if parsing fails or if no unattached argument is left in the token stream.
     pub fn require_positional<'a, T: FromStr>(&mut self, p: Positional<'c>) -> Result<T, Error<'c>>
@@ -387,6 +400,23 @@ impl<'c> Cli<'c> {
                 )
             ))
         }
+    }
+
+    /// Forces all the next [Positional] to be captured from the token stream.
+    /// 
+    /// Errors if parsing fails or if zero unattached arguments are left in the token stream to begin.
+    /// 
+    /// The resulting vector is guaranteed to have `.len() >= 1`.
+    pub fn require_positional_all<'a, T: FromStr>(&mut self, p: Positional<'c>) -> Result<Vec<T>, Error<'c>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        let mut result = Vec::<T>::new();
+        result.push(self.require_positional(p)?);
+        while let Some(v) = self.try_positional()? {
+            result.push(v);
+        }
+        Ok(result)
     }
 
     /// Iterates through the list of tokens to find the first suggestion against a flag to return.
@@ -1537,5 +1567,22 @@ mod test {
 
         let mut cli = Cli::new().tokenize(args(vec!["orbit", "--debug", "--debug", "--debug=1"]));
         assert_eq!(cli.check_flag_all(Flag::new("debug")).is_err(), true);
+    }
+
+    #[test]
+    fn requires_positional_all() {
+        let mut cli = Cli::new().tokenize(args(vec!["sum", "10", "20", "30"]));
+        assert_eq!(cli.require_positional_all::<u8>(Positional::new("digit")).unwrap(), vec![10, 20, 30]);
+
+        let mut cli = Cli::new().tokenize(args(vec!["sum"]));
+        assert_eq!(cli.require_positional_all::<u8>(Positional::new("digit")).unwrap_err().kind(), ErrorKind::MissingPositional);
+
+        let mut cli = Cli::new().tokenize(args(vec!["sum", "10", "--option", "20", "30"]));
+        // note: remember to always check options and flags before positional arguments
+        assert_eq!(cli.check_option::<u8>(Optional::new("option")).unwrap(), Some(20));
+        assert_eq!(cli.require_positional_all::<u8>(Positional::new("digit")).unwrap(), vec![10, 30]);
+
+        let mut cli = Cli::new().tokenize(args(vec!["sum", "100"]));
+        assert_eq!(cli.require_positional_all::<u8>(Positional::new("digit")).unwrap(), vec![100]);
     }
 }
