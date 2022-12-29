@@ -183,6 +183,7 @@ impl<'c> Cli<'c> {
     /// 
     /// This is enabled by default. Note this function is not able to override
     /// the crayon crate's color variable.
+    #[cfg(feature = "color")]
     pub fn use_color(mut self) -> Self {
         self.use_color = true;
         self
@@ -191,6 +192,7 @@ impl<'c> Cli<'c> {
     /// Disables the coloring for error messages.
     /// 
     /// Note this function is only effective if the overall crayon crate's color is enabled.
+    #[cfg(feature = "color")]
     pub fn disable_color(mut self) -> Self {
         self.use_color = false;
         self
