@@ -217,11 +217,11 @@ impl<'a> Display for Error<'a> {
                 #[cfg(feature = "color")]
                 let flag_str = color(flag_str.blue());
                 #[cfg(feature = "color")]
-                let val_str = color(val.yellow());
+                let val = color(val.yellow());
                 write!(
                     f,
                     "flag '{}' cannot accept a value but was given '{}'",
-                    flag_str, val_str
+                    flag_str, val
                 )
             }
             ErrorContext::UnexpectedArg(word) => {
@@ -237,8 +237,9 @@ impl<'a> Display for Error<'a> {
             ErrorContext::UnknownSubcommand(arg, subcommand) => {
                 #[cfg(feature = "color")]
                 let subcommand = color(subcommand.yellow());
+                let arg_str = arg.to_string();
                 #[cfg(feature = "color")]
-                let arg_str = color(arg.to_string().blue());
+                let arg_str = color(arg_str.blue());
                 write!(f, "invalid subcommand '{}' for '{}'", subcommand, arg_str)
             }
             ErrorContext::CustomRule(err) => {
