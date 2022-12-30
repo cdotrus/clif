@@ -5,6 +5,7 @@ use clif::arg::*;
 use clif::cmd::{Command, FromCli, Runner};
 use clif::Cli;
 use clif::Error;
+use clif::ErrorKind;
 use clif::Help;
 
 fn main() {
@@ -24,9 +25,9 @@ fn go() -> u8 {
         }
         // report cli error
         Err(err) => {
-            match err.as_quick_help() {
-                Some(text) => println!("{}", text),
-                None => eprintln!("{}: {}", "error".red().bold(), &err),
+            match err.kind() {
+                ErrorKind::Help => println!("{}", &err),
+                _ => eprintln!("{}: {}", "error".red().bold(), &err),
             }
             err.code()
         }
@@ -58,7 +59,7 @@ impl FromCli for Addrs {
         Self: Sized,
     {
         // set short help text in case of an error
-        cli.help(
+        cli.check_help(
             Help::new()
                 .quick_text(HELP)
                 .flag(Flag::new("help").switch('h'))

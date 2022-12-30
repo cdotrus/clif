@@ -1,11 +1,11 @@
 use crayon::*;
 use std::env::args;
 
-use clif::arg::*;
 use clif::cmd::{Command, FromCli, Runner};
 use clif::Cli;
 use clif::Error;
 use clif::Help;
+use clif::{arg::*, ErrorKind};
 
 fn main() {
     std::process::exit(go() as i32)
@@ -24,9 +24,9 @@ fn go() -> u8 {
         }
         // report cli error
         Err(err) => {
-            match err.as_quick_help() {
-                Some(text) => println!("{}", text),
-                None => eprintln!("{}: {}", "error".red().bold(), &err),
+            match err.kind() {
+                ErrorKind::Help => println!("{}", &err),
+                _ => eprintln!("{}: {}", "error".red().bold(), &err),
             }
             err.code()
         }
@@ -45,7 +45,7 @@ struct Sum {
 impl Sum {
     /// Adds `lhs` and `rhs` together.
     fn run(&self) -> Digit {
-        self.nums.iter().fold(Digit::default(), |acc, x| { acc + x })
+        self.nums.iter().fold(Digit::default(), |acc, x| acc + x)
     }
 }
 
@@ -58,12 +58,13 @@ impl FromCli for Sum {
         Self: Sized,
     {
         // set short help text in case of an error
-        cli.help(
+        cli.check_help(
             Help::new()
                 .quick_text(HELP)
                 .flag(Flag::new("help").switch('h'))
                 .ref_usage(USAGE_LINE..USAGE_LINE + 2),
         )?;
+
         let radd = Sum {
             verbose: cli.check_flag(Flag::new("verbose"))?,
             nums: cli.require_positional_all(Positional::new("num"))?,

@@ -8,8 +8,8 @@ pub mod arg;
 
 pub use cli::Cli;
 pub use error::Error;
-pub use error::ErrorKind;
 pub use error::ErrorContext;
+pub use error::ErrorKind;
 pub use help::Help;
 
 pub mod cmd {
@@ -59,7 +59,7 @@ mod tests {
                 Self: Sized,
             {
                 // set help text in case of an error
-                cli.help(help::Help::new().quick_text(HELP))?;
+                cli.check_help(help::Help::new().quick_text(HELP))?;
                 let radd = Radd {
                     verbose: cli.check_flag(Flag::new("verbose"))?,
                     lhs: cli.require_positional(Positional::new("lhs"))?,

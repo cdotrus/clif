@@ -1,5 +1,5 @@
-use std::fmt::Display;
 use std::fmt::Debug;
+use std::fmt::Display;
 
 mod symbol {
     pub const FLAG: &str = "--";

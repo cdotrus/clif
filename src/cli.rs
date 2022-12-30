@@ -78,7 +78,7 @@ pub struct Cli<'c> {
 impl<'c> Cli<'c> {
     /// Creates a minimal `Cli` struct.
     pub fn new() -> Self {
-        Cli {
+        Self {
             tokens: Vec::new(),
             opt_store: HashMap::new(),
             known_args: Vec::new(),
@@ -180,29 +180,33 @@ impl<'c> Cli<'c> {
     }
 
     /// Enables the coloring for error messages.
-    /// 
+    ///
     /// This is enabled by default. Note this function is not able to override
     /// the crayon crate's color variable.
     #[cfg(feature = "color")]
-    pub fn use_color(mut self) -> Self {
+    pub fn use_color(&mut self) -> () {
         self.use_color = true;
-        self
     }
 
     /// Disables the coloring for error messages.
-    /// 
+    ///
     /// Note this function is only effective if the overall crayon crate's color is enabled.
     #[cfg(feature = "color")]
-    pub fn disable_color(mut self) -> Self {
+    pub fn disable_color(&mut self) -> () {
         self.use_color = false;
+    }
+
+    /// Disables the coloring for error messages.
+    ///
+    /// Note this function is only effective if the overall crayon crate's color is enabled.
+    #[cfg(feature = "color")]
+    pub fn no_color(mut self) -> Self {
+        self.disable_color();
         self
     }
 
-    /// Sets the help `text` to display when detecting `--help, -h` on the command-line.
-    ///
-    /// If the help text has a line describing overall usage, you can specify it with `usage_line`.
-    /// This value the 0-indexed line to print when a missing positional error occurs.
-    pub fn help(&mut self, help: Help<'c>) -> Result<(), Error<'c>> {
+    /// Sets the [Help] attribute to display and checks if help has already been raised in the token stream.
+    pub fn check_help(&mut self, help: Help<'c>) -> Result<(), Error<'c>> {
         self.help = Some(help);
         // check for flag if not already raised
         if self.asking_for_help == false && self.is_help_enabled() == true {
@@ -210,11 +214,6 @@ impl<'c> Cli<'c> {
                 self.check_flag(self.help.as_ref().unwrap().get_flag().clone())?;
         }
         Ok(())
-    }
-
-    /// Checks if help is enabled and is some value.
-    pub fn is_help_enabled(&self) -> bool {
-        self.help.is_some()
     }
 
     /// Removes the current help text set for the command-line argument parser.
@@ -238,6 +237,11 @@ impl<'c> Cli<'c> {
         self
     }
 
+    /// Checks if help is enabled and is some value.
+    fn is_help_enabled(&self) -> bool {
+        self.help.is_some()
+    }
+
     /// Checks if help has been raised and will return its own error for displaying
     /// help.
     fn prioritize_help(&self) -> Result<(), Error<'c>> {
@@ -245,7 +249,12 @@ impl<'c> Cli<'c> {
             && self.asking_for_help == true
             && self.is_help_enabled() == true
         {
-            Err(Error::new(self.help.clone(), ErrorKind::Help, ErrorContext::Help, self.use_color))
+            Err(Error::new(
+                self.help.clone(),
+                ErrorKind::Help,
+                ErrorContext::Help,
+                self.use_color,
+            ))
         } else {
             Ok(())
         }
@@ -323,12 +332,9 @@ impl<'c> Cli<'c> {
                 if pos < i {
                     self.prioritize_help()?;
                     return Err(Error::new(
-                        self.help.clone(), 
-                        ErrorKind::OutOfContextArgSuggest, 
-                        ErrorContext::OutofContextArgSuggest(
-                            format!("{}{}", prefix, key),
-                            command,
-                        ),
+                        self.help.clone(),
+                        ErrorKind::OutOfContextArgSuggest,
+                        ErrorContext::OutofContextArgSuggest(format!("{}{}", prefix, key), command),
                         self.use_color,
                     ));
                 }
@@ -342,12 +348,17 @@ impl<'c> Cli<'c> {
             } else {
                 None
             } {
-                Err(Error::new(self.help.clone(), ErrorKind::SuggestSubcommand, ErrorContext::SuggestWord(command, w.to_string()), self.use_color))
+                Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::SuggestSubcommand,
+                    ErrorContext::SuggestWord(command, w.to_string()),
+                    self.use_color,
+                ))
             } else {
                 self.prioritize_help()?;
                 Err(Error::new(
-                    self.help.clone(), 
-                    ErrorKind::UnknownSubcommand, 
+                    self.help.clone(),
+                    ErrorKind::UnknownSubcommand,
                     ErrorContext::UnknownSubcommand(
                         self.known_args.pop().expect("requires positional argument"),
                         command,
@@ -374,11 +385,9 @@ impl<'c> Cli<'c> {
     }
 
     /// Attempts to extract the next unattached argument to get a positional with valid parsing.
-    /// 
+    ///
     /// Assumes the [Positional] argument is already added as the last element to the `known_args` vector.
-    fn try_positional<'a, T: FromStr>(
-        &mut self,
-    ) -> Result<Option<T>, Error<'c>>
+    fn try_positional<'a, T: FromStr>(&mut self) -> Result<Option<T>, Error<'c>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
@@ -389,8 +398,8 @@ impl<'c> Cli<'c> {
                     self.prioritize_help()?;
                     self.prioritize_suggestion()?;
                     Err(Error::new(
-                        self.help.clone(), 
-                        ErrorKind::BadType, 
+                        self.help.clone(),
+                        ErrorKind::BadType,
                         ErrorContext::FailedCast(
                             self.known_args.pop().unwrap(),
                             word,
@@ -417,22 +426,23 @@ impl<'c> Cli<'c> {
             self.prioritize_help()?;
             self.is_empty()?;
             Err(Error::new(
-                self.help.clone(), 
-                ErrorKind::MissingPositional, 
-                ErrorContext::FailedArg(
-                    self.known_args.pop().unwrap(),
-                ),
+                self.help.clone(),
+                ErrorKind::MissingPositional,
+                ErrorContext::FailedArg(self.known_args.pop().unwrap()),
                 self.use_color,
             ))
         }
     }
 
     /// Forces all the next [Positional] to be captured from the token stream.
-    /// 
+    ///
     /// Errors if parsing fails or if zero unattached arguments are left in the token stream to begin.
-    /// 
+    ///
     /// The resulting vector is guaranteed to have `.len() >= 1`.
-    pub fn require_positional_all<'a, T: FromStr>(&mut self, p: Positional<'c>) -> Result<Vec<T>, Error<'c>>
+    pub fn require_positional_all<'a, T: FromStr>(
+        &mut self,
+        p: Positional<'c>,
+    ) -> Result<Vec<T>, Error<'c>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
@@ -465,8 +475,8 @@ impl<'c> Cli<'c> {
                         None
                     } {
                         Some(Error::new(
-                            self.help.clone(), 
-                            ErrorKind::SuggestArg, 
+                            self.help.clone(),
+                            ErrorKind::SuggestArg,
                             ErrorContext::SuggestWord(
                                 format!("{}{}", symbol::FLAG, f.0),
                                 format!("{}{}", symbol::FLAG, word),
@@ -512,8 +522,8 @@ impl<'c> Cli<'c> {
                         Err(err) => {
                             self.prioritize_help()?;
                             Err(Error::new(
-                                self.help.clone(), 
-                                ErrorKind::BadType, 
+                                self.help.clone(),
+                                ErrorKind::BadType,
                                 ErrorContext::FailedCast(
                                     self.known_args.pop().unwrap(),
                                     word,
@@ -526,11 +536,9 @@ impl<'c> Cli<'c> {
                 } else {
                     self.prioritize_help()?;
                     Err(Error::new(
-                        self.help.clone(), 
-                        ErrorKind::ExpectingValue, 
-                        ErrorContext::FailedArg(
-                            self.known_args.pop().unwrap(),
-                        ),
+                        self.help.clone(),
+                        ErrorKind::ExpectingValue,
+                        ErrorContext::FailedArg(self.known_args.pop().unwrap()),
                         self.use_color,
                     ))
                 }
@@ -539,11 +547,9 @@ impl<'c> Cli<'c> {
             _ => {
                 self.prioritize_help()?;
                 Err(Error::new(
-                    self.help.clone(), 
-                    ErrorKind::DuplicateOptions, 
-                    ErrorContext::FailedArg(
-                        self.known_args.pop().unwrap(),
-                    ), 
+                    self.help.clone(),
+                    ErrorKind::DuplicateOptions,
+                    ErrorContext::FailedArg(self.known_args.pop().unwrap()),
                     self.use_color,
                 ))
             }
@@ -567,13 +573,9 @@ impl<'c> Cli<'c> {
             Some(r) => match r.len() <= n {
                 true => Ok(Some(r)),
                 false => Err(Error::new(
-                    self.help.clone(), 
-                    ErrorKind::ExceedingMaxCount, 
-                    ErrorContext::ExceededThreshold(
-                        self.known_args.pop().unwrap(),
-                        r.len(),
-                        n,
-                    ),
+                    self.help.clone(),
+                    ErrorKind::ExceedingMaxCount,
+                    ErrorContext::ExceededThreshold(self.known_args.pop().unwrap(), r.len(), n),
                     self.use_color,
                 )),
             },
@@ -612,8 +614,8 @@ impl<'c> Cli<'c> {
                     Err(err) => {
                         self.prioritize_help()?;
                         return Err(Error::new(
-                            self.help.clone(), 
-                            ErrorKind::BadType, 
+                            self.help.clone(),
+                            ErrorKind::BadType,
                             ErrorContext::FailedCast(
                                 self.known_args.pop().unwrap(),
                                 word,
@@ -626,11 +628,9 @@ impl<'c> Cli<'c> {
             } else {
                 self.prioritize_help()?;
                 return Err(Error::new(
-                    self.help.clone(), 
-                    ErrorKind::ExpectingValue, 
-                    ErrorContext::FailedArg(
-                        self.known_args.pop().unwrap(),
-                    ),
+                    self.help.clone(),
+                    ErrorKind::ExpectingValue,
+                    ErrorContext::FailedArg(self.known_args.pop().unwrap()),
                     self.use_color,
                 ));
             }
@@ -647,11 +647,9 @@ impl<'c> Cli<'c> {
             true => {
                 self.prioritize_help()?;
                 Err(Error::new(
-                    self.help.clone(), 
-                    ErrorKind::DuplicateOptions, 
-                    ErrorContext::FailedArg(
-                        self.known_args.pop().unwrap(),
-                    ),
+                    self.help.clone(),
+                    ErrorKind::DuplicateOptions,
+                    ErrorContext::FailedArg(self.known_args.pop().unwrap()),
                     self.use_color,
                 ))
             }
@@ -676,12 +674,9 @@ impl<'c> Cli<'c> {
         if let Some(val) = occurences.iter_mut().find(|p| p.is_some()) {
             self.prioritize_help()?;
             return Err(Error::new(
-                self.help.clone(), 
-                ErrorKind::UnexpectedValue, 
-                ErrorContext::UnexpectedValue(
-                    self.known_args.pop().unwrap(),
-                    val.take().unwrap(),
-                ),
+                self.help.clone(),
+                ErrorKind::UnexpectedValue,
+                ErrorContext::UnexpectedValue(self.known_args.pop().unwrap(), val.take().unwrap()),
                 self.use_color,
             ));
         } else {
@@ -715,13 +710,9 @@ impl<'c> Cli<'c> {
         match occurences <= n {
             true => Ok(occurences),
             false => Err(Error::new(
-                self.help.clone(), 
-                ErrorKind::ExceedingMaxCount, 
-                ErrorContext::ExceededThreshold(
-                    self.known_args.pop().unwrap(),
-                    occurences,
-                    n,
-                ),
+                self.help.clone(),
+                ErrorKind::ExceedingMaxCount,
+                ErrorContext::ExceededThreshold(self.known_args.pop().unwrap(), occurences, n),
                 self.use_color,
             )),
         }
@@ -779,8 +770,8 @@ impl<'c> Cli<'c> {
                             None
                         } {
                             return Err(Error::new(
-                                self.help.clone(), 
-                                ErrorKind::SuggestArg, 
+                                self.help.clone(),
+                                ErrorKind::SuggestArg,
                                 ErrorContext::SuggestWord(
                                     format!("{}{}", symbol::FLAG, key),
                                     format!("{}{}", symbol::FLAG, closest),
@@ -809,36 +800,26 @@ impl<'c> Cli<'c> {
         // check if map is empty, and return the minimum found index.
         if let Some((prefix, key, _)) = self.capture_bad_flag(self.tokens.len())? {
             Err(Error::new(
-                self.help.clone(), 
-                ErrorKind::UnexpectedArg, 
-                ErrorContext::UnexpectedArg(
-                    format!("{}{}", prefix, key)
-                ),
+                self.help.clone(),
+                ErrorKind::UnexpectedArg,
+                ErrorContext::UnexpectedArg(format!("{}{}", prefix, key)),
                 self.use_color,
             ))
         // find first non-none token
         } else if let Some(t) = self.tokens.iter().find(|p| p.is_some()) {
             match t {
-                Some(Token::UnattachedArgument(_, word)) => {
-                    Err(Error::new(
-                        self.help.clone(), 
-                        ErrorKind::UnexpectedArg, 
-                        ErrorContext::UnexpectedArg(
-                            word.to_string()
-                        ),
-                        self.use_color,
-                    ))
-                }
-                Some(Token::Terminator(_)) => {
-                    Err(Error::new(
-                        self.help.clone(), 
-                        ErrorKind::UnexpectedArg, 
-                        ErrorContext::UnexpectedArg(
-                            symbol::FLAG.to_string()
-                        ),
-                        self.use_color,
-                    ))
-                }
+                Some(Token::UnattachedArgument(_, word)) => Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::UnexpectedArg,
+                    ErrorContext::UnexpectedArg(word.to_string()),
+                    self.use_color,
+                )),
+                Some(Token::Terminator(_)) => Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::UnexpectedArg,
+                    ErrorContext::UnexpectedArg(symbol::FLAG.to_string()),
+                    self.use_color,
+                )),
                 _ => panic!("no other tokens types should be left"),
             }
         } else {
@@ -898,8 +879,8 @@ impl<'c> Cli<'c> {
                     }
                     Some(Token::Ignore(_, _)) => Some(Ok(tkn.take().unwrap().take_str())),
                     Some(Token::AttachedArgument(_, _)) => Some(Err(Error::new(
-                        self.help.clone(), 
-                        ErrorKind::UnexpectedValue, 
+                        self.help.clone(),
+                        ErrorKind::UnexpectedValue,
                         ErrorContext::UnexpectedValue(
                             Arg::Flag(Flag::new("")),
                             tkn.take().unwrap().take_str(),
@@ -1612,17 +1593,37 @@ mod test {
     #[test]
     fn requires_positional_all() {
         let mut cli = Cli::new().tokenize(args(vec!["sum", "10", "20", "30"]));
-        assert_eq!(cli.require_positional_all::<u8>(Positional::new("digit")).unwrap(), vec![10, 20, 30]);
+        assert_eq!(
+            cli.require_positional_all::<u8>(Positional::new("digit"))
+                .unwrap(),
+            vec![10, 20, 30]
+        );
 
         let mut cli = Cli::new().tokenize(args(vec!["sum"]));
-        assert_eq!(cli.require_positional_all::<u8>(Positional::new("digit")).unwrap_err().kind(), ErrorKind::MissingPositional);
+        assert_eq!(
+            cli.require_positional_all::<u8>(Positional::new("digit"))
+                .unwrap_err()
+                .kind(),
+            ErrorKind::MissingPositional
+        );
 
         let mut cli = Cli::new().tokenize(args(vec!["sum", "10", "--option", "20", "30"]));
         // note: remember to always check options and flags before positional arguments
-        assert_eq!(cli.check_option::<u8>(Optional::new("option")).unwrap(), Some(20));
-        assert_eq!(cli.require_positional_all::<u8>(Positional::new("digit")).unwrap(), vec![10, 30]);
+        assert_eq!(
+            cli.check_option::<u8>(Optional::new("option")).unwrap(),
+            Some(20)
+        );
+        assert_eq!(
+            cli.require_positional_all::<u8>(Positional::new("digit"))
+                .unwrap(),
+            vec![10, 30]
+        );
 
         let mut cli = Cli::new().tokenize(args(vec!["sum", "100"]));
-        assert_eq!(cli.require_positional_all::<u8>(Positional::new("digit")).unwrap(), vec![100]);
+        assert_eq!(
+            cli.require_positional_all::<u8>(Positional::new("digit"))
+                .unwrap(),
+            vec![100]
+        );
     }
 }

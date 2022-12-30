@@ -61,7 +61,7 @@ mod test {
 
     impl FromCli for Add {
         fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, Error<'c>> {
-            cli.help(
+            cli.check_help(
                 Help::new()
                     .quick_text("    add <lhs> <rhs> [--verbose]")
                     .ref_usage(0..0),
