@@ -37,6 +37,7 @@ mod test {
     struct Add {
         lhs: u32,
         rhs: u32,
+        force: bool,
         verbose: bool,
     }
 
@@ -69,6 +70,7 @@ mod test {
             // the ability to "learn options" beforehand is possible, or can be skipped
             // "learn options" here (take in known args (as ref?))
             Ok(Add {
+                force: cli.check_flag(Flag::new("force"))?,
                 verbose: cli.check_flag(Flag::new("verbose"))?,
                 lhs: cli.require_positional(Positional::new("lhs"))?,
                 rhs: cli.require_positional(Positional::new("rhs"))?,
@@ -80,6 +82,7 @@ mod test {
     #[derive(Debug, PartialEq)]
     struct Op {
         version: bool,
+        force: bool,
         command: Option<OpSubcommand>,
     }
 
@@ -96,6 +99,7 @@ mod test {
     impl FromCli for Op {
         fn from_cli<'c>(cli: &'c mut Cli<'_>) -> Result<Self, Error<'c>> {
             Ok(Op {
+                force: cli.check_flag(Flag::new("force"))?,
                 version: cli.check_flag(Flag::new("version"))?,
                 command: cli.check_command(Positional::new("subcommand"))?,
             })
@@ -134,6 +138,7 @@ mod test {
             Add {
                 lhs: 9,
                 rhs: 10,
+                force: false,
                 verbose: false
             }
         );
@@ -145,6 +150,7 @@ mod test {
             Add {
                 lhs: 1,
                 rhs: 4,
+                force: false,
                 verbose: true
             }
         );
@@ -156,6 +162,7 @@ mod test {
             Add {
                 lhs: 5,
                 rhs: 2,
+                force: false,
                 verbose: true
             }
         );
@@ -168,10 +175,12 @@ mod test {
         assert_eq!(
             op,
             Op {
+                force: false,
                 version: false,
                 command: Some(OpSubcommand::Add(Add {
                     lhs: 9,
                     rhs: 10,
+                    force: false,
                     verbose: false,
                 }))
             }
@@ -183,6 +192,7 @@ mod test {
             op,
             Op {
                 version: false,
+                force: false,
                 command: None
             }
         );
@@ -193,9 +203,11 @@ mod test {
             op,
             Op {
                 version: true,
+                force: false,
                 command: Some(OpSubcommand::Add(Add {
                     lhs: 9,
                     rhs: 10,
+                    force: false,
                     verbose: false,
                 }))
             }
@@ -212,5 +224,26 @@ mod test {
     fn unimplemented_nested_command() {
         let mut cli = Cli::new().tokenize(args(vec!["op", "mult", "9", "10"]));
         let _ = Op::from_cli(&mut cli);
+    }
+
+    #[test]
+    fn reuse_collected_arg() {
+        let mut cli = Cli::new().tokenize(args(vec!["op", "--version", "add", "9", "10", "--force"]));
+        let op = Op::from_cli(&mut cli).unwrap();
+        assert_eq!(
+            op,
+            Op {
+                version: true,
+                // force is true here
+                force: true,
+                command: Some(OpSubcommand::Add(Add {
+                    lhs: 9,
+                    rhs: 10,
+                    // force is true here as well
+                    force: true,
+                    verbose: false,
+                }))
+            }
+        );
     }
 }

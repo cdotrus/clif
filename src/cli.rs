@@ -64,9 +64,45 @@ impl Token {
 }
 
 #[derive(Debug, PartialEq)]
+struct Slot {
+    pointers: Vec<usize>,
+    visited: bool
+}
+
+impl Slot {
+    fn new() -> Self {
+        Self {
+            pointers: Vec::new(),
+            visited: false
+        }
+    }
+
+    fn push(&mut self, i: usize) -> () {
+        self.pointers.push(i);
+    }
+
+    fn is_visited(&self) -> bool {
+        self.visited
+    }
+
+    fn visit(&mut self) -> () {
+        self.visited = true;
+    }
+
+    fn get_indices(&self) -> &Vec<usize> {
+        &self.pointers
+    }
+
+    fn first(&self) -> Option<&usize> {
+        self.pointers.first()
+    }
+}
+
+
+#[derive(Debug, PartialEq)]
 pub struct Cli<'c> {
     tokens: Vec<Option<Token>>,
-    opt_store: HashMap<Tag<String>, Vec<usize>>,
+    opt_store: HashMap<Tag<String>, Slot>,
     known_args: Vec<Arg<'c>>,
     help: Option<Help<'c>>,
     asking_for_help: bool,
@@ -127,7 +163,7 @@ impl<'c> Cli<'c> {
                     } else {
                         store
                             .entry(Tag::Flag(arg))
-                            .or_insert(Vec::new())
+                            .or_insert(Slot::new())
                             .push(tokens.len());
                         tokens.push(Some(Token::Flag(i)));
                     }
@@ -139,13 +175,13 @@ impl<'c> Cli<'c> {
                     if let Some(c) = arg.next() {
                         store
                             .entry(Tag::Switch(c.to_string()))
-                            .or_insert(Vec::new())
+                            .or_insert(Slot::new())
                             .push(tokens.len());
                         tokens.push(Some(Token::Switch(i, c)));
                     } else {
                         store
                             .entry(Tag::Switch(String::new()))
-                            .or_insert(Vec::new())
+                            .or_insert(Slot::new())
                             .push(tokens.len());
                         tokens.push(Some(Token::EmptySwitch(i)));
                     }
@@ -153,7 +189,7 @@ impl<'c> Cli<'c> {
                     while let Some(c) = arg.next() {
                         store
                             .entry(Tag::Switch(c.to_string()))
-                            .or_insert(Vec::new())
+                            .or_insert(Slot::new())
                             .push(tokens.len());
                         tokens.push(Some(Token::Switch(i, c)));
                     }
@@ -461,7 +497,7 @@ impl<'c> Cli<'c> {
         let mut kv: Vec<(&String, &Vec<usize>)> = self
             .opt_store
             .iter()
-            .map(|s| (s.0.as_ref(), s.1))
+            .map(|(tag, slot)| (tag.as_ref(), slot.get_indices()))
             .collect::<Vec<(&String, &Vec<usize>)>>();
         kv.sort_by(|a, b| a.1.first().unwrap().cmp(b.1.first().unwrap()));
         let bank = self.known_args_as_flag_names();
@@ -739,7 +775,7 @@ impl<'c> Cli<'c> {
     /// the `opt_store` hashmap is empty, it will return none.
     fn find_first_flag_left(&self, breakpoint: usize) -> Option<(&str, usize)> {
         let mut min_i: Option<(&str, usize)> = None;
-        let mut opt_it = self.opt_store.iter();
+        let mut opt_it = self.opt_store.iter().filter(|(_, slot)| slot.is_visited() == false );
         while let Some((key, val)) = opt_it.next() {
             // check if this flag's index comes before the currently known minimum index
             min_i = if *val.first().unwrap() < breakpoint
@@ -897,9 +933,12 @@ impl<'c> Cli<'c> {
     ///
     /// Information about Option<Vec<T>> vs. empty Vec<T>: https://users.rust-lang.org/t/space-time-usage-to-construct-vec-t-vs-option-vec-t/35596/6
     fn take_flag_locs(&mut self, tag: &str) -> Vec<usize> {
-        self.opt_store
-            .remove(&Tag::Flag(tag.to_owned()))
-            .unwrap_or(vec![])
+        if let Some(slot) = self.opt_store.get_mut(&Tag::Flag(tag.to_owned())) {
+            slot.visit();
+            slot.get_indices().to_vec()
+        } else {
+            Vec::new()
+        }
     }
 
     /// Returns all locations in the token stream where the switch identifier `c` is found.
@@ -907,9 +946,13 @@ impl<'c> Cli<'c> {
         // allocate &str to the stack and not the heap to get from store
         let mut arr = [0; 4];
         let tag = c.encode_utf8(&mut arr);
-        self.opt_store
-            .remove(&Tag::Switch(tag.to_owned()))
-            .unwrap_or(vec![])
+
+        if let Some(slot) = self.opt_store.get_mut(&Tag::Switch(tag.to_owned())) {
+            slot.visit();
+            slot.get_indices().to_vec()
+        } else {
+            Vec::new()
+        }
     }
 }
 
@@ -1271,16 +1314,16 @@ mod test {
             "synthesis",
             "-jto",
         ]));
-        let mut opt_store = HashMap::<Tag<String>, Vec<usize>>::new();
+        let mut opt_store = HashMap::<Tag<String>, Slot>::new();
         // store long options
-        opt_store.insert(Tag::Flag("help".to_string()), vec![0, 7]);
-        opt_store.insert(Tag::Flag("lib".to_string()), vec![4]);
-        opt_store.insert(Tag::Flag("name".to_string()), vec![5]);
+        opt_store.insert(Tag::Flag("help".to_string()), Slot { pointers: vec![0, 7], visited: false });
+        opt_store.insert(Tag::Flag("lib".to_string()), Slot { pointers:vec![4], visited: false });
+        opt_store.insert(Tag::Flag("name".to_string()), Slot { pointers:vec![5], visited: false });
         // stores switches too
-        opt_store.insert(Tag::Switch("v".to_string()), vec![1]);
-        opt_store.insert(Tag::Switch("s".to_string()), vec![8]);
-        opt_store.insert(Tag::Switch("c".to_string()), vec![9]);
-        opt_store.insert(Tag::Switch("i".to_string()), vec![10]);
+        opt_store.insert(Tag::Switch("v".to_string()), Slot { pointers:vec![1], visited: false });
+        opt_store.insert(Tag::Switch("s".to_string()), Slot { pointers:vec![8], visited: false });
+        opt_store.insert(Tag::Switch("c".to_string()), Slot { pointers:vec![9], visited: false });
+        opt_store.insert(Tag::Switch("i".to_string()), Slot { pointers:vec![10], visited: false });
         assert_eq!(cli.opt_store, opt_store);
     }
 
