@@ -228,7 +228,8 @@ mod test {
 
     #[test]
     fn reuse_collected_arg() {
-        let mut cli = Cli::new().tokenize(args(vec!["op", "--version", "add", "9", "10", "--force"]));
+        let mut cli =
+            Cli::new().tokenize(args(vec!["op", "--version", "add", "9", "10", "--force"]));
         let op = Op::from_cli(&mut cli).unwrap();
         assert_eq!(
             op,

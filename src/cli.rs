@@ -67,14 +67,14 @@ impl Token {
 #[derive(Debug, PartialEq)]
 struct Slot {
     pointers: Vec<usize>,
-    visited: bool
+    visited: bool,
 }
 
 impl Slot {
     fn new() -> Self {
         Self {
             pointers: Vec::new(),
-            visited: false
+            visited: false,
         }
     }
 
@@ -98,7 +98,6 @@ impl Slot {
         self.pointers.first()
     }
 }
-
 
 #[derive(Debug, PartialEq)]
 pub struct Cli<'c> {
@@ -777,7 +776,10 @@ impl<'c> Cli<'c> {
     /// the `opt_store` hashmap is empty, it will return none.
     fn find_first_flag_left(&self, breakpoint: usize) -> Option<(&str, usize)> {
         let mut min_i: Option<(&str, usize)> = None;
-        let mut opt_it = self.opt_store.iter().filter(|(_, slot)| slot.is_visited() == false );
+        let mut opt_it = self
+            .opt_store
+            .iter()
+            .filter(|(_, slot)| slot.is_visited() == false);
         while let Some((key, val)) = opt_it.next() {
             // check if this flag's index comes before the currently known minimum index
             min_i = if *val.first().unwrap() < breakpoint
@@ -1318,14 +1320,56 @@ mod test {
         ]));
         let mut opt_store = HashMap::<Tag<String>, Slot>::new();
         // store long options
-        opt_store.insert(Tag::Flag("help".to_string()), Slot { pointers: vec![0, 7], visited: false });
-        opt_store.insert(Tag::Flag("lib".to_string()), Slot { pointers:vec![4], visited: false });
-        opt_store.insert(Tag::Flag("name".to_string()), Slot { pointers:vec![5], visited: false });
+        opt_store.insert(
+            Tag::Flag("help".to_string()),
+            Slot {
+                pointers: vec![0, 7],
+                visited: false,
+            },
+        );
+        opt_store.insert(
+            Tag::Flag("lib".to_string()),
+            Slot {
+                pointers: vec![4],
+                visited: false,
+            },
+        );
+        opt_store.insert(
+            Tag::Flag("name".to_string()),
+            Slot {
+                pointers: vec![5],
+                visited: false,
+            },
+        );
         // stores switches too
-        opt_store.insert(Tag::Switch("v".to_string()), Slot { pointers:vec![1], visited: false });
-        opt_store.insert(Tag::Switch("s".to_string()), Slot { pointers:vec![8], visited: false });
-        opt_store.insert(Tag::Switch("c".to_string()), Slot { pointers:vec![9], visited: false });
-        opt_store.insert(Tag::Switch("i".to_string()), Slot { pointers:vec![10], visited: false });
+        opt_store.insert(
+            Tag::Switch("v".to_string()),
+            Slot {
+                pointers: vec![1],
+                visited: false,
+            },
+        );
+        opt_store.insert(
+            Tag::Switch("s".to_string()),
+            Slot {
+                pointers: vec![8],
+                visited: false,
+            },
+        );
+        opt_store.insert(
+            Tag::Switch("c".to_string()),
+            Slot {
+                pointers: vec![9],
+                visited: false,
+            },
+        );
+        opt_store.insert(
+            Tag::Switch("i".to_string()),
+            Slot {
+                pointers: vec![10],
+                visited: false,
+            },
+        );
         assert_eq!(cli.opt_store, opt_store);
     }
 
