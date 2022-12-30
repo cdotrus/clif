@@ -5,6 +5,7 @@ use crate::help::Help;
 use crate::seqalin;
 use crate::seqalin::Cost;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::str::FromStr;
 
 mod symbol {
@@ -500,7 +501,7 @@ impl<'c> Cli<'c> {
             .map(|(tag, slot)| (tag.as_ref(), slot.get_indices()))
             .collect::<Vec<(&String, &Vec<usize>)>>();
         kv.sort_by(|a, b| a.1.first().unwrap().cmp(b.1.first().unwrap()));
-        let bank = self.known_args_as_flag_names();
+        let bank: Vec<&str> = self.known_args_as_flag_names().into_iter().collect();
         let r = kv
             .iter()
             .find_map(|f| match self.tokens.get(*f.1.first().unwrap()).unwrap() {
@@ -758,7 +759,8 @@ impl<'c> Cli<'c> {
     /// flag.
     ///
     /// This method is useful for acquiring a word bank to offer a flag spelling suggestion.
-    fn known_args_as_flag_names(&self) -> Vec<&str> {
+    fn known_args_as_flag_names(&self) -> HashSet<&str> {
+        // note: collect into a `std::collections::HashSet` to avoid dupe
         self.known_args
             .iter()
             .filter_map(|f| match f {
@@ -799,7 +801,7 @@ impl<'c> Cli<'c> {
                     Token::Switch(_, _) | Token::EmptySwitch(_) => symbol::SWITCH,
                     Token::Flag(_) => {
                         // try to match it with a valid flag from word bank
-                        let bank = self.known_args_as_flag_names();
+                        let bank: Vec<&str> = self.known_args_as_flag_names().into_iter().collect();
                         if let Some(closest) = if self.threshold > 0 {
                             seqalin::sel_min_edit_str(key, &bank, self.threshold)
                         } else {
