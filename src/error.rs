@@ -77,6 +77,14 @@ impl<'a> Error<'a> {
             NEW_PARAGRAPH, flag_str
         ))
     }
+
+    /// Transforms any error into a custom rule error to be used during [crate::Cli] parsing.
+    pub fn validate<T, E: std::error::Error + 'static>(rule: Result<T, E>) -> Result<T, Self> {
+        match rule {
+            Ok(t) => Ok(t),
+            Err(e) => Err(Self::new(None, ErrorKind::CustomRule, ErrorContext::CustomRule(Box::new(e)), false))
+        }
+    }
 }
 
 #[derive(Debug)]

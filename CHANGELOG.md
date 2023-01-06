@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 - unreleased
+
+### Features
+
+- adds `Error::validate(...)` function to transform any error into a `CliError` during cli parsing 
+
 ## 0.1.0
 
 ### Features
