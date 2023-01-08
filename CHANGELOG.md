@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3
+
+### Fixes
+
+- `color` features now presents proper `color()` function instead of erroring during compilation due to misnamed duplicate function
+
 ## 0.1.2
 
 ### Changes

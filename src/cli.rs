@@ -246,7 +246,7 @@ impl Cli {
     /// This is enabled by default. Note this function is not able to override
     /// the crayon crate's color variable.
     #[cfg(feature = "color")]
-    pub fn no_color(mut self) -> Self {
+    pub fn color(mut self) -> Self {
         self.use_color();
         self
     }
