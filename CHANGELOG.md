@@ -4,6 +4,8 @@
 
 ### Changes
 
+- adds `color()` builder function for `Cli` struct (enabled by default)
+
 - internal argument data is stored as `String` without lifetime dependency on `Cli` struct to allow for better code structuring and usage in from the `Cli` struct
 
 ## 0.1.1
