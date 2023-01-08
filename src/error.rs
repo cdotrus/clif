@@ -21,20 +21,20 @@ type SomeError = Box<dyn std::error::Error>;
 type Argument = String;
 
 #[derive(Debug)]
-pub struct Error<'a> {
+pub struct Error {
     #[cfg(feature = "color")]
     use_color: bool,
-    context: ErrorContext<'a>,
-    help: Option<Help<'a>>,
+    context: ErrorContext,
+    help: Option<Help>,
     kind: ErrorKind,
 }
 
-impl<'a> Error<'a> {
+impl Error {
     /// Creates a new error.
     pub fn new(
-        help: Option<Help<'a>>,
+        help: Option<Help>,
         kind: ErrorKind,
-        context: ErrorContext<'a>,
+        context: ErrorContext,
         _use_color: bool,
     ) -> Self {
         Self {
@@ -79,7 +79,7 @@ impl<'a> Error<'a> {
     }
 
     /// Transforms any error into a custom rule error to be used during [crate::Cli] parsing.
-    pub fn validate<T, E: std::error::Error + 'static>(rule: Result<T, E>) -> Result<T, Self> {
+    pub fn validate<U, E: std::error::Error + 'static>(rule: Result<U, E>) -> Result<U, Self> {
         match rule {
             Ok(t) => Ok(t),
             Err(e) => Err(Self::new(None, ErrorKind::CustomRule, ErrorContext::CustomRule(Box::new(e)), false))
@@ -89,15 +89,15 @@ impl<'a> Error<'a> {
 
 #[derive(Debug)]
 #[allow(dead_code)]
-pub enum ErrorContext<'a> {
-    ExceededThreshold(Arg<'a>, CurCount, MaxCount),
-    FailedArg(Arg<'a>),
-    UnexpectedValue(Arg<'a>, Value),
-    FailedCast(Arg<'a>, Value, SomeError),
+pub enum ErrorContext {
+    ExceededThreshold(Arg, CurCount, MaxCount),
+    FailedArg(Arg),
+    UnexpectedValue(Arg, Value),
+    FailedCast(Arg, Value, SomeError),
     OutofContextArgSuggest(Argument, Subcommand),
     UnexpectedArg(Argument),
     SuggestWord(String, Suggestion),
-    UnknownSubcommand(Arg<'a>, Subcommand),
+    UnknownSubcommand(Arg, Subcommand),
     CustomRule(SomeError),
     Help,
 }
@@ -119,9 +119,9 @@ pub enum ErrorKind {
     ExceedingMaxCount,
 }
 
-impl<'a> std::error::Error for Error<'a> {}
+impl std::error::Error for Error {}
 
-impl<'a> Display for Error<'a> {
+impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         #[cfg(feature = "color")]
         let color = |a: ColoredString| -> String {

@@ -54,7 +54,7 @@ mod tests {
         impl Runner<()> for Radd {}
 
         impl FromCli for Radd {
-            fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, error::Error<'c>>
+            fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, error::Error>
             where
                 Self: Sized,
             {

@@ -15,7 +15,7 @@ pub trait FromCli {
     /// 2. `optionals`
     /// 3. `positionals`
     /// 4. `subcommands`
-    fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, Error<'c>>
+    fn from_cli(cli: &mut Cli) -> Result<Self, Error>
     where
         Self: Sized;
 }
@@ -61,7 +61,7 @@ mod test {
     }
 
     impl FromCli for Add {
-        fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, Error<'c>> {
+        fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, Error> {
             cli.check_help(
                 Help::new()
                     .quick_text("    add <lhs> <rhs> [--verbose]")
@@ -97,12 +97,14 @@ mod test {
     }
 
     impl FromCli for Op {
-        fn from_cli<'c>(cli: &'c mut Cli<'_>) -> Result<Self, Error<'c>> {
-            Ok(Op {
+        fn from_cli(cli: &mut Cli) -> Result<Self, Error> {
+            let m = Ok(Op {
                 force: cli.check_flag(Flag::new("force"))?,
                 version: cli.check_flag(Flag::new("version"))?,
                 command: cli.check_command(Positional::new("subcommand"))?,
-            })
+            });
+            cli.is_empty()?;
+            m
         }
     }
 
@@ -112,7 +114,7 @@ mod test {
     }
 
     impl FromCli for OpSubcommand {
-        fn from_cli<'c>(cli: &'c mut Cli<'_>) -> Result<Self, Error<'c>> {
+        fn from_cli(cli: &mut Cli) -> Result<Self, Error> {
             match cli.match_command(&["add", "mult", "sub"])?.as_ref() {
                 "add" => Ok(OpSubcommand::Add(Add::from_cli(cli)?)),
                 _ => panic!("an unimplemented command was passed through!"),

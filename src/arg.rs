@@ -8,13 +8,13 @@ mod symbol {
 }
 
 #[derive(PartialEq)]
-pub enum Arg<'a> {
-    Flag(Flag<'a>),
-    Positional(Positional<'a>),
-    Optional(Optional<'a>),
+pub enum Arg {
+    Flag(Flag),
+    Positional(Positional),
+    Optional(Optional),
 }
 
-impl<'a> Arg<'a> {
+impl Arg {
     pub fn as_flag(&self) -> Option<&Flag> {
         match self {
             Arg::Flag(f) => Some(f),
@@ -24,7 +24,7 @@ impl<'a> Arg<'a> {
     }
 }
 
-impl<'a> Display for Arg<'a> {
+impl Display for Arg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
             Arg::Flag(a) => write!(f, "{}", a),
@@ -34,24 +34,24 @@ impl<'a> Display for Arg<'a> {
     }
 }
 
-impl<'a> Debug for Arg<'a> {
+impl Debug for Arg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "'{}'", self.to_string())
     }
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Positional<'a> {
-    name: &'a str,
+pub struct Positional {
+    name: String,
 }
 
-impl<'a> Positional<'a> {
-    pub fn new(s: &'a str) -> Self {
-        Self { name: s }
+impl Positional {
+    pub fn new<T: AsRef<str>>(s: T) -> Self {
+        Self { name: s.as_ref().to_string() }
     }
 }
 
-impl<'a> Display for Positional<'a> {
+impl Display for Positional {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(
             f,
@@ -64,15 +64,15 @@ impl<'a> Display for Positional<'a> {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Flag<'a> {
-    name: &'a str,
+pub struct Flag {
+    name: String,
     switch: Option<char>,
 }
 
-impl<'a> Flag<'a> {
-    pub fn new(s: &'a str) -> Self {
+impl Flag {
+    pub fn new<T: AsRef<str>> (s: T) -> Self {
         Self {
-            name: s,
+            name: s.as_ref().to_string(),
             switch: None,
         }
     }
@@ -83,7 +83,7 @@ impl<'a> Flag<'a> {
     }
 
     pub fn get_name(&self) -> &str {
-        self.name
+        self.name.as_ref()
     }
 
     pub fn get_switch(&self) -> Option<&char> {
@@ -91,28 +91,28 @@ impl<'a> Flag<'a> {
     }
 }
 
-impl<'a> Display for Flag<'a> {
+impl Display for Flag {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "{}{}", symbol::FLAG, self.name)
+        write!(f, "{}{}", symbol::FLAG, self.get_name())
     }
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Optional<'a> {
-    option: Flag<'a>,
-    value: Positional<'a>,
+pub struct Optional {
+    option: Flag,
+    value: Positional,
 }
 
-impl<'a> Optional<'a> {
-    pub fn new(s: &'a str) -> Self {
+impl Optional {
+    pub fn new<T: AsRef<str>>(s: T) -> Self {
         Self {
-            option: Flag::new(s),
+            option: Flag::new(s.as_ref()),
             value: Positional::new(s),
         }
     }
 
-    pub fn value(mut self, s: &'a str) -> Self {
-        self.value.name = s;
+    pub fn value<T: AsRef<str>>(mut self, s: T) -> Self {
+        self.value.name = s.as_ref().to_string();
         self
     }
 
@@ -125,12 +125,12 @@ impl<'a> Optional<'a> {
         &self.option
     }
 
-    pub fn _get_pos(&self) -> &Positional {
+    pub fn get_positional(&self) -> &Positional {
         &self.value
     }
 }
 
-impl<'a> Display for Optional<'a> {
+impl Display for Optional {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(f, "{} {}", self.option, self.value)
     }
@@ -143,10 +143,10 @@ mod test {
     #[test]
     fn positional_new() {
         let ip = Positional::new("ip");
-        assert_eq!(ip, Positional { name: "ip" });
+        assert_eq!(ip, Positional { name: String::from("ip") });
 
         let version = Positional::new("version");
-        assert_eq!(version, Positional { name: "version" });
+        assert_eq!(version, Positional { name: String::from("version") });
     }
 
     #[test]
@@ -164,7 +164,7 @@ mod test {
         assert_eq!(
             help,
             Flag {
-                name: "help",
+                name: String::from("help"),
                 switch: Some('h'),
             }
         );
@@ -175,7 +175,7 @@ mod test {
         assert_eq!(
             version,
             Flag {
-                name: "version",
+                name: String::from("version"),
                 switch: None,
             }
         );
@@ -224,7 +224,7 @@ mod test {
         );
         assert_eq!(version.get_flag().get_switch(), Some(&'c'));
 
-        assert_eq!(version._get_pos(), &Positional::new("rgb"));
+        assert_eq!(version.get_positional(), &Positional::new("rgb"));
     }
 
     #[test]

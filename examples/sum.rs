@@ -53,7 +53,7 @@ impl Sum {
 impl Runner<()> for Sum {}
 
 impl FromCli for Sum {
-    fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, Error<'c>>
+    fn from_cli(cli: &mut Cli) -> Result<Self, Error>
     where
         Self: Sized,
     {

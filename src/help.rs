@@ -7,55 +7,55 @@ mod tag {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Help<'c> {
-    arg: Flag<'c>,
-    summary: Option<&'c str>,
-    usage: Option<&'c str>,
-    quick_text: &'c str,
-    long_text: Option<&'c str>,
+pub struct Help<> {
+    arg: Flag,
+    summary: Option<String>,
+    usage: Option<String>,
+    quick_text: String,
+    long_text: Option<String>,
 }
 
-impl<'c> Help<'c> {
+impl Help {
     pub fn new() -> Self {
         Self {
             arg: Flag::new(tag::FLAG).switch(tag::SWITCH),
             summary: None,
             usage: None,
-            quick_text: "",
+            quick_text: String::new(),
             long_text: None,
         }
     }
 
-    pub fn long_text(mut self, t: &'c str) -> Self {
-        self.long_text = Some(t);
+    pub fn long_text<T: AsRef<str>>(mut self, t: T) -> Self {
+        self.long_text = Some(t.as_ref().to_string());
         self
     }
 
-    pub fn flag(mut self, f: Flag<'c>) -> Self {
+    pub fn flag(mut self, f: Flag) -> Self {
         self.arg = f;
         self
     }
 
-    pub fn quick_text(mut self, t: &'c str) -> Self {
-        self.quick_text = t;
+    pub fn quick_text<T: AsRef<str>>(mut self, t: T) -> Self {
+        self.quick_text = t.as_ref().to_string();
         self
     }
 
-    pub fn usage(mut self, t: &'c str) -> Self {
-        self.usage = Some(t);
+    pub fn usage<T: AsRef<str>>(mut self, t: T) -> Self {
+        self.usage = Some(t.as_ref().to_string());
         self
     }
 
-    pub fn get_flag(&self) -> &Flag<'c> {
+    pub fn get_flag(&self) -> &Flag {
         &self.arg
     }
 
-    pub fn get_quick_text(&self) -> &'c str {
-        self.quick_text
+    pub fn get_quick_text(&self) -> &str {
+        self.quick_text.as_ref()
     }
 
-    pub fn get_usage(&self) -> Option<&'c str> {
-        self.usage
+    pub fn get_usage(&self) -> Option<&str> {
+        Some(self.usage.as_ref()?.as_ref())
     }
 
     /// References the appropriate lines for a text statement for usage according to the line range `line_bounds`.
@@ -91,7 +91,7 @@ impl<'c> Help<'c> {
             self.usage = Some(
                 self.quick_text
                     .get(start_char.unwrap()..end_char.unwrap())
-                    .unwrap(),
+                    .unwrap().to_owned(),
             );
         }
 
