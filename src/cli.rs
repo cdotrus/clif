@@ -262,6 +262,16 @@ impl Cli {
         Ok(())
     }
 
+    /// Clears the `asking_for_help` status flag.
+    pub fn clear_help(&mut self) -> () {
+        self.asking_for_help = false;
+    }
+
+    /// Directly calls the help error if asking for help is enabled.
+    pub fn raise_help(&self) -> Result<(), Error> {
+        self.prioritize_help()
+    }
+
     /// Removes the current help text set for the command-line argument parser.
     pub fn disable_help(&mut self) -> () {
         self.help = None;
