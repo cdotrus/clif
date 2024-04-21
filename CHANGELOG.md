@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.5
+
+### Fixes
+
+- updates dependencies
+
 ## 0.1.3
 
 ### Fixes
