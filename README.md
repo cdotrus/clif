@@ -2,20 +2,14 @@
 
 [![Pipeline](https://github.com/cdotrus/cliproc/actions/workflows/pipeline.yml/badge.svg?branch=trunk)](https://github.com/cdotrus/cliproc/actions/workflows/pipeline.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A low-level, fast, and configurable command-line processor.
+This library provides support for fast, low-level, and configurable command-line processing.
 
-### Install
-
-Run the following Cargo command in your project directory:
-``` bash
-cargo add --git "https://github.com/cdotrus/cliproc.git" --tag "0.1.5"
-```
-Or add the following line to your Cargo.toml:
 ``` toml
-clif = { git = "https://github.com/cdotrus/cliproc.git", tag = "0.1.5", version = "0.1.5" }
+[dependencies]
+cliproc = "0.1.0"
 ```
 
-## Overview
+## Details
 
 Arguments are learned as-they-go: the cli parsing framework learns each argument upon checking it. For this reason, in order to maximize effectiveness of the parsing __it is recommended to parse arguments in the following order__:
 1. flags
@@ -23,7 +17,9 @@ Arguments are learned as-they-go: the cli parsing framework learns each argument
 3. positionals
 4. subcommands
 
-> __Note:__ For a type to be accepted by the command-line it must implement the `std::str::FromStr` trait.
+For a type to be accepted by the command-line, it must implement the standard library's [`std::str::FromStr`] trait.
+
+[`std::str::FromStr`]: (https://doc.rust-lang.org/std/str/trait.FromStr.html)
 
 ## Features
 
