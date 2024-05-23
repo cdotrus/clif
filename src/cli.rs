@@ -1,13 +1,15 @@
 use crate::error::{self, CapMode};
-use crate::error::{Error, ErrorContext, ErrorKind};
 use crate::help::Help;
 use crate::seqalin;
 use crate::seqalin::Cost;
-use crate::{arg::*, Climb};
+use crate::{arg::*, Program};
 use colored::Colorize;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::str::FromStr;
+
+pub type Result<T> = std::result::Result<T, Error>;
+pub use crate::error::{Error, ErrorContext, ErrorKind};
 
 mod symbol {
     // series of characters to denote flags and switches
@@ -250,7 +252,7 @@ impl Cli {
     }
 
     /// Sets the [Help] attribute to display and checks if help has already been raised in the token stream.
-    pub fn check_help(&mut self, help: Help) -> Result<(), Error> {
+    pub fn check_help(&mut self, help: Help) -> Result<()> {
         self.help = Some(help);
         // check for flag if not already raised
         if self.asking_for_help == false && self.is_help_enabled() == true {
@@ -266,7 +268,7 @@ impl Cli {
     }
 
     /// Directly calls the help error if asking for help is enabled.
-    pub fn raise_help(&self) -> Result<(), Error> {
+    pub fn raise_help(&self) -> Result<()> {
         self.prioritize_help()
     }
 
@@ -298,7 +300,7 @@ impl Cli {
 
     /// Checks if help has been raised and will return its own error for displaying
     /// help.
-    fn prioritize_help(&self) -> Result<(), Error> {
+    fn prioritize_help(&self) -> Result<()> {
         if self.prioritize_help == true
             && self.asking_for_help == true
             && self.is_help_enabled() == true
@@ -335,7 +337,7 @@ impl Cli {
     /// Determines if an `UnattachedArg` exists to be served as a subcommand.
     ///
     /// If so, it will call `from_cli` on the type defined. If not, it will return none.
-    pub fn check_command<'a, T: Climb<U>, U>(&mut self, p: Positional) -> Result<Option<T>, Error> {
+    pub fn check_command<'a, T: Program<U>, U>(&mut self, p: Positional) -> Result<Option<T>> {
         self.known_args.push(Arg::Positional(p));
         // check but do not remove if an unattached arg exists
         let command_exists = self
@@ -347,7 +349,7 @@ impl Cli {
             })
             .is_some();
         if command_exists {
-            Ok(Some(T::from_cli(self)?))
+            Ok(Some(T::parse(self)?))
         } else {
             return Ok(None);
         }
@@ -362,7 +364,7 @@ impl Cli {
     pub fn match_command<T: AsRef<str> + std::cmp::PartialEq>(
         &mut self,
         words: &[T],
-    ) -> Result<String, Error> {
+    ) -> Result<String> {
         // find the unattached arg's index before it is removed from the token stream
         let i: usize = self
             .tokens
@@ -424,7 +426,7 @@ impl Cli {
     ///
     /// Errors if parsing fails. If the next argument is not a positional, it will
     /// not move forward in the token stream.
-    pub fn check_positional<'a, T: FromStr>(&mut self, p: Positional) -> Result<Option<T>, Error>
+    pub fn check_positional<'a, T: FromStr>(&mut self, p: Positional) -> Result<Option<T>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
@@ -435,7 +437,7 @@ impl Cli {
     /// Attempts to extract the next unattached argument to get a positional with valid parsing.
     ///
     /// Assumes the [Positional] argument is already added as the last element to the `known_args` vector.
-    fn try_positional<'a, T: FromStr>(&mut self) -> Result<Option<T>, Error>
+    fn try_positional<'a, T: FromStr>(&mut self) -> Result<Option<T>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
@@ -464,7 +466,7 @@ impl Cli {
     /// Forces the next [Positional] to exist from token stream.
     ///
     /// Errors if parsing fails or if no unattached argument is left in the token stream.
-    pub fn require_positional<'a, T: FromStr>(&mut self, p: Positional) -> Result<T, Error>
+    pub fn require_positional<'a, T: FromStr>(&mut self, p: Positional) -> Result<T>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
@@ -487,7 +489,7 @@ impl Cli {
     /// Errors if parsing fails or if zero unattached arguments are left in the token stream to begin.
     ///
     /// The resulting vector is guaranteed to have `.len() >= 1`.
-    pub fn require_positional_all<'a, T: FromStr>(&mut self, p: Positional) -> Result<Vec<T>, Error>
+    pub fn require_positional_all<'a, T: FromStr>(&mut self, p: Positional) -> Result<Vec<T>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
@@ -502,7 +504,7 @@ impl Cli {
     /// Iterates through the list of tokens to find the first suggestion against a flag to return.
     ///
     /// Returns ok if cannot make a suggestion.
-    fn prioritize_suggestion(&self) -> Result<(), Error> {
+    fn prioritize_suggestion(&self) -> Result<()> {
         let mut kv: Vec<(&String, &Vec<usize>)> = self
             .opt_store
             .iter()
@@ -546,7 +548,7 @@ impl Cli {
     /// Queries for a value of `Optional`.
     ///
     /// Errors if there are multiple values or if parsing fails.
-    pub fn check_option<'a, T: FromStr>(&mut self, o: Optional) -> Result<Option<T>, Error>
+    pub fn check_option<'a, T: FromStr>(&mut self, o: Optional) -> Result<Option<T>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
@@ -608,7 +610,7 @@ impl Cli {
         &mut self,
         o: Optional,
         n: usize,
-    ) -> Result<Option<Vec<T>>, Error>
+    ) -> Result<Option<Vec<T>>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
@@ -631,7 +633,7 @@ impl Cli {
     /// Queries for all values behind an `Optional`.
     ///
     /// Errors if a parsing fails from string.
-    pub fn check_option_all<'a, T: FromStr>(&mut self, o: Optional) -> Result<Option<Vec<T>>, Error>
+    pub fn check_option_all<'a, T: FromStr>(&mut self, o: Optional) -> Result<Option<Vec<T>>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
@@ -683,7 +685,7 @@ impl Cli {
     /// Queries if a flag was raised once and only once.
     ///
     /// Errors if the flag has an attached value or was raised multiple times.
-    pub fn check_flag<'a>(&mut self, f: Flag) -> Result<bool, Error> {
+    pub fn check_flag<'a>(&mut self, f: Flag) -> Result<bool> {
         let occurences = self.check_flag_all(f)?;
         match occurences > 1 {
             true => {
@@ -703,7 +705,7 @@ impl Cli {
     /// Queries for the number of times a flag was raised.
     ///
     /// Errors if the flag has an attached value. Returning a zero indicates the flag was never raised.
-    pub fn check_flag_all<'a>(&mut self, f: Flag) -> Result<usize, Error> {
+    pub fn check_flag_all<'a>(&mut self, f: Flag) -> Result<usize> {
         // collect information on where the flag can be found
         let mut locs = self.take_flag_locs(f.get_name());
         // try to find the switch locations
@@ -746,7 +748,7 @@ impl Cli {
     /// Queries for the number of times a flag was raised up until `n` times.
     ///
     /// Errors if the flag has an attached value. Returning a zero indicates the flag was never raised.
-    pub fn check_flag_n<'a>(&mut self, f: Flag, n: usize) -> Result<usize, Error> {
+    pub fn check_flag_n<'a>(&mut self, f: Flag, n: usize) -> Result<usize> {
         let occurences = self.check_flag_all(f)?;
         // verify the size of the vector does not exceed `n`
         match occurences <= n {
@@ -800,7 +802,7 @@ impl Cli {
     }
 
     /// Verifies there are no uncaught flags behind a given index.
-    fn capture_bad_flag<'a>(&self, i: usize) -> Result<Option<(&str, &str, usize)>, Error> {
+    fn capture_bad_flag<'a>(&self, i: usize) -> Result<Option<(&str, &str, usize)>> {
         if let Some((key, val)) = self.find_first_flag_left(i) {
             self.prioritize_help()?;
             // check what type of token it was to determine if it was called with '-' or '--'
@@ -841,7 +843,7 @@ impl Cli {
     /// Verifies there are no more tokens remaining in the stream.
     ///
     /// Note this mutates the referenced self only if an error is found.
-    pub fn is_empty<'a>(&'a self) -> Result<(), Error> {
+    pub fn is_empty<'a>(&'a self) -> Result<()> {
         self.prioritize_help()?;
         // check if map is empty, and return the minimum found index.
         if let Some((prefix, key, _)) = self.capture_bad_flag(self.tokens.len())? {
@@ -909,7 +911,7 @@ impl Cli {
     ///
     /// Errors if an `AttachedArg` is found (could only be immediately after terminator)
     /// after the terminator.
-    pub fn check_remainder(&mut self) -> Result<Vec<String>, Error> {
+    pub fn check_remainder(&mut self) -> Result<Vec<String>> {
         self.tokens
             .iter_mut()
             .skip_while(|tkn| match tkn {
@@ -968,16 +970,16 @@ impl Cli {
 
 impl Cli {
     /// Glues the interface layer and backend logic for a smooth hand-off of data.
-    pub fn go<U, T: Climb<U>>(mut self, context: U) -> u8 {
-        match T::from_cli(&mut self) {
+    pub fn go<U, T: Program<U>>(mut self, context: U) -> u8 {
+        match T::parse(&mut self) {
             // construct the application
-            Ok(app) => {
+            Ok(program) => {
                 // verify the cli has no additional arguments if this is the top-level command being parsed
                 match self.is_empty() {
                     Ok(_) => {
                         let cap_mode = self.cap_mode;
                         std::mem::drop(self);
-                        match app.execute(&context) {
+                        match program.execute(&context) {
                             Ok(_) => 0,
                             Err(err) => {
                                 eprintln!(

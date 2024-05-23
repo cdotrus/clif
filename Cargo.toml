@@ -6,7 +6,7 @@ edition = "2021"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/cdotrus/cliproc"
-keywords = ["cli"]
+keywords = ["cli", "parser", "arg", "parse"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

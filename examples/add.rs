@@ -2,9 +2,10 @@ use std::env;
 use std::error::Error;
 use std::fmt::Display;
 
-use cliproc::Help;
-use cliproc::{Cli, CliResult, Climb, CommandResult};
-use cliproc::{Flag, Positional};
+use cliproc::cli;
+use cliproc::proc;
+use cliproc::{Cli, Program};
+use cliproc::{Flag, Help, Positional};
 
 fn main() {
     std::process::exit(Cli::default().tokenize(env::args()).go::<(), Add>(()) as i32)
@@ -36,8 +37,8 @@ impl Display for AddError {
 
 impl Error for AddError {}
 
-impl Climb<()> for Add {
-    fn from_cli<'c>(cli: &'c mut Cli) -> CliResult<Self> {
+impl Program<()> for Add {
+    fn parse(cli: &mut Cli) -> cli::Result<Self> {
         cli.check_help(Help::default().text(HELP))?;
         Ok(Add {
             verbose: cli.check_flag(Flag::new("verbose"))?,
@@ -46,7 +47,7 @@ impl Climb<()> for Add {
         })
     }
 
-    fn execute(self, _: &()) -> CommandResult {
+    fn execute(self, _: &()) -> proc::Result {
         let sum = self.run();
         if sum > u8::MAX.into() {
             Err(AddError::Overflow)?

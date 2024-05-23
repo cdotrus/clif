@@ -1,8 +1,8 @@
 use std::env;
 
-use cliproc::{Cli, Help};
-use cliproc::{CliResult, Climb, CommandResult};
-use cliproc::{Flag, Positional};
+use cliproc::{cli, proc};
+use cliproc::{Cli, Program};
+use cliproc::{Flag, Help, Positional};
 
 fn main() {
     std::process::exit(Cli::default().tokenize(env::args()).go::<(), Sum>(()) as i32)
@@ -24,8 +24,8 @@ impl Sum {
     }
 }
 
-impl Climb<()> for Sum {
-    fn from_cli(cli: &mut Cli) -> CliResult<Self> {
+impl Program<()> for Sum {
+    fn parse(cli: &mut Cli) -> cli::Result<Self> {
         // set short help text in case of an error
         cli.check_help(Help::default().text(HELP))?;
         Ok(Sum {
@@ -34,7 +34,7 @@ impl Climb<()> for Sum {
         })
     }
 
-    fn execute(self, _: &()) -> CommandResult {
+    fn execute(self, _: &()) -> proc::Result {
         let sum: Digit = self.run();
         if self.verbose == true {
             println!("{:?} = {}", self.nums, sum);

@@ -1,15 +1,15 @@
 mod arg;
-mod cli;
-mod command;
 mod error;
 mod help;
 mod seqalin;
 
+pub mod cli;
+pub mod proc;
+
 pub use arg::{Flag, Optional, Positional};
 pub use cli::Cli;
-pub use command::{CliResult, Climb, CommandResult};
-pub use error::{Error, ErrorContext, ErrorKind};
 pub use help::Help;
+pub use proc::Program;
 
 #[cfg(test)]
 mod tests {
@@ -39,11 +39,8 @@ mod tests {
             }
         }
 
-        impl Climb<()> for Radd {
-            fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, error::Error>
-            where
-                Self: Sized,
-            {
+        impl Program<()> for Radd {
+            fn parse(cli: &mut Cli) -> Result<Self, error::Error> {
                 // set help text in case of an error
                 cli.check_help(help::Help::new().text(HELP))?;
                 let radd = Radd {
@@ -72,7 +69,7 @@ mod tests {
             let mut cli = Cli::new()
                 .threshold(4)
                 .tokenize(args(vec!["radd", "9", "10"]));
-            let program = Radd::from_cli(&mut cli).unwrap();
+            let program = Radd::parse(&mut cli).unwrap();
             std::mem::drop(cli);
 
             assert_eq!(program.run(), 19);

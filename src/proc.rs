@@ -1,10 +1,9 @@
+use crate::cli;
 use crate::cli::Cli;
-use crate::error::Error;
 
-pub type CommandResult = Result<(), Box<dyn std::error::Error>>;
-pub type CliResult<T> = Result<T, Error>;
+pub type Result = std::result::Result<(), Box<dyn std::error::Error>>;
 
-pub trait Climb<T>: Sized {
+pub trait Program<T>: Sized {
     /// Collects tokens from the command-line interface to define a struct's fields.
     ///
     /// The recommended argument discovery order is
@@ -15,12 +14,12 @@ pub trait Climb<T>: Sized {
     ///
     /// It is considered a programmer's error if the arguments are not processed
     /// in the specified order by their type.
-    fn from_cli(cli: &mut Cli) -> CliResult<Self>;
+    fn parse(cli: &mut Cli) -> cli::Result<Self>;
 
     /// Run the backend logic for this command.
     ///
     /// This function owns the self structure.
-    fn execute(self, context: &T) -> CommandResult;
+    fn execute(self, context: &T) -> Result;
 }
 
 #[cfg(test)]
@@ -42,8 +41,8 @@ mod test {
         verbose: bool,
     }
 
-    impl Climb<()> for Add {
-        fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, Error> {
+    impl Program<()> for Add {
+        fn parse(cli: &mut Cli) -> cli::Result<Self> {
             cli.check_help(Help::new().text("Usage: add <lhs> <rhs> [--verbose]"))?;
             // the ability to "learn options" beforehand is possible, or can be skipped
             // "learn options" here (take in known args (as ref?))
@@ -55,7 +54,7 @@ mod test {
             })
         }
 
-        fn execute(self, _: &()) -> Result<(), Box<dyn std::error::Error>> {
+        fn execute(self, _: &()) -> Result {
             println!("{}", self.run());
             Ok(())
         }
@@ -80,8 +79,8 @@ mod test {
         command: Option<OpSubcommand>,
     }
 
-    impl Climb<()> for Op {
-        fn from_cli(cli: &mut Cli) -> Result<Self, Error> {
+    impl Program<()> for Op {
+        fn parse(cli: &mut Cli) -> cli::Result<Self> {
             let m = Ok(Op {
                 force: cli.check_flag(Flag::new("force"))?,
                 version: cli.check_flag(Flag::new("version"))?,
@@ -91,7 +90,7 @@ mod test {
             m
         }
 
-        fn execute(self, context: &()) -> Result<(), Box<dyn std::error::Error>> {
+        fn execute(self, context: &()) -> Result {
             if let Some(command) = self.command {
                 command.execute(context)
             } else {
@@ -105,15 +104,15 @@ mod test {
         Add(Add),
     }
 
-    impl Climb<()> for OpSubcommand {
-        fn from_cli(cli: &mut Cli) -> Result<Self, Error> {
+    impl Program<()> for OpSubcommand {
+        fn parse(cli: &mut Cli) -> cli::Result<Self> {
             match cli.match_command(&["add", "mult", "sub"])?.as_ref() {
-                "add" => Ok(OpSubcommand::Add(Add::from_cli(cli)?)),
+                "add" => Ok(OpSubcommand::Add(Add::parse(cli)?)),
                 _ => panic!("an unimplemented command was passed through!"),
             }
         }
 
-        fn execute(self, _: &()) -> CommandResult {
+        fn execute(self, _: &()) -> Result {
             match self {
                 OpSubcommand::Add(c) => c.execute(&()),
             }
@@ -123,7 +122,7 @@ mod test {
     #[test]
     fn make_add_command() {
         let mut cli = Cli::new().tokenize(args(vec!["add", "9", "10"]));
-        let add = Add::from_cli(&mut cli).unwrap();
+        let add = Add::parse(&mut cli).unwrap();
         assert_eq!(
             add,
             Add {
@@ -135,7 +134,7 @@ mod test {
         );
 
         let mut cli = Cli::new().tokenize(args(vec!["add", "1", "4", "--verbose"]));
-        let add = Add::from_cli(&mut cli).unwrap();
+        let add = Add::parse(&mut cli).unwrap();
         assert_eq!(
             add,
             Add {
@@ -147,7 +146,7 @@ mod test {
         );
 
         let mut cli = Cli::new().tokenize(args(vec!["add", "5", "--verbose", "2"]));
-        let add = Add::from_cli(&mut cli).unwrap();
+        let add = Add::parse(&mut cli).unwrap();
         assert_eq!(
             add,
             Add {
@@ -162,7 +161,7 @@ mod test {
     #[test]
     fn nested_commands() {
         let mut cli = Cli::new().tokenize(args(vec!["op", "add", "9", "10"]));
-        let op = Op::from_cli(&mut cli).unwrap();
+        let op = Op::parse(&mut cli).unwrap();
         assert_eq!(
             op,
             Op {
@@ -178,7 +177,7 @@ mod test {
         );
 
         let mut cli = Cli::new().tokenize(args(vec!["op"]));
-        let op = Op::from_cli(&mut cli).unwrap();
+        let op = Op::parse(&mut cli).unwrap();
         assert_eq!(
             op,
             Op {
@@ -189,7 +188,7 @@ mod test {
         );
 
         let mut cli = Cli::new().tokenize(args(vec!["op", "--version", "add", "9", "10"]));
-        let op = Op::from_cli(&mut cli).unwrap();
+        let op = Op::parse(&mut cli).unwrap();
         assert_eq!(
             op,
             Op {
@@ -206,7 +205,7 @@ mod test {
 
         // out-of-context arg '--verbose' move it after 'add'
         let mut cli = Cli::new().tokenize(args(vec!["op", "--verbose", "add", "9", "10"]));
-        let op = Op::from_cli(&mut cli);
+        let op = Op::parse(&mut cli);
         assert!(op.is_err());
     }
 
@@ -214,14 +213,14 @@ mod test {
     #[should_panic]
     fn unimplemented_nested_command() {
         let mut cli = Cli::new().tokenize(args(vec!["op", "mult", "9", "10"]));
-        let _ = Op::from_cli(&mut cli);
+        let _ = Op::parse(&mut cli);
     }
 
     #[test]
     fn reuse_collected_arg() {
         let mut cli =
             Cli::new().tokenize(args(vec!["op", "--version", "add", "9", "10", "--force"]));
-        let op = Op::from_cli(&mut cli).unwrap();
+        let op = Op::parse(&mut cli).unwrap();
         assert_eq!(
             op,
             Op {
