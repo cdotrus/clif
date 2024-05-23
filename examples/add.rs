@@ -7,8 +7,10 @@ use cliproc::proc;
 use cliproc::{Cli, Program};
 use cliproc::{Flag, Help, Positional};
 
-fn main() {
-    std::process::exit(Cli::default().tokenize(env::args()).go::<(), Add>(()) as i32)
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    Cli::default().tokenize(env::args()).go::<(), Add>(())
 }
 
 #[derive(PartialEq, Debug)]

@@ -6,6 +6,7 @@ use crate::{arg::*, Program};
 use colored::Colorize;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::process::ExitCode;
 use std::str::FromStr;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -970,7 +971,7 @@ impl Cli {
 
 impl Cli {
     /// Glues the interface layer and backend logic for a smooth hand-off of data.
-    pub fn go<U, T: Program<U>>(mut self, context: U) -> u8 {
+    pub fn go<U, T: Program<U>>(mut self, context: U) -> ExitCode {
         match T::parse(&mut self) {
             // construct the application
             Ok(program) => {
@@ -980,14 +981,14 @@ impl Cli {
                         let cap_mode = self.cap_mode;
                         std::mem::drop(self);
                         match program.execute(&context) {
-                            Ok(_) => 0,
+                            Ok(_) => ExitCode::from(0),
                             Err(err) => {
                                 eprintln!(
                                     "{}: {}",
                                     "error".red().bold(),
                                     error::format_err_msg(err.to_string(), cap_mode)
                                 );
-                                101
+                                ExitCode::from(101)
                             }
                         }
                     }
@@ -1001,7 +1002,7 @@ impl Cli {
                                 error::format_err_msg(err.to_string(), self.cap_mode)
                             ),
                         }
-                        err.code()
+                        ExitCode::from(err.code())
                     }
                 }
             }
@@ -1015,7 +1016,7 @@ impl Cli {
                         error::format_err_msg(err.to_string(), self.cap_mode)
                     ),
                 }
-                err.code()
+                ExitCode::from(err.code())
             }
         }
     }

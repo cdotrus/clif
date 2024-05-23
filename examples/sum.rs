@@ -1,11 +1,11 @@
 use std::env;
 
 use cliproc::{cli, proc};
-use cliproc::{Cli, Program};
+use cliproc::{Cli, ExitCode, Program};
 use cliproc::{Flag, Help, Positional};
 
-fn main() {
-    std::process::exit(Cli::default().tokenize(env::args()).go::<(), Sum>(()) as i32)
+fn main() -> ExitCode {
+    Cli::default().tokenize(env::args()).go::<(), Sum>(())
 }
 
 type Digit = f32;

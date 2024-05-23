@@ -10,6 +10,7 @@ pub use arg::{Flag, Optional, Positional};
 pub use cli::Cli;
 pub use help::Help;
 pub use proc::Program;
+pub use std::process::ExitCode;
 
 #[cfg(test)]
 mod tests {
