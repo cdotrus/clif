@@ -10,7 +10,7 @@ use cliproc::{Flag, Help, Positional};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    Cli::default().tokenize(env::args()).go::<(), Add>(())
+    Cli::default().tokenize(env::args()).go::<Add>()
 }
 
 #[derive(PartialEq, Debug)]
@@ -39,7 +39,7 @@ impl Display for AddError {
 
 impl Error for AddError {}
 
-impl Program<()> for Add {
+impl Program for Add {
     fn parse(cli: &mut Cli) -> cli::Result<Self> {
         cli.check_help(Help::default().text(HELP))?;
         Ok(Add {
@@ -49,7 +49,7 @@ impl Program<()> for Add {
         })
     }
 
-    fn execute(self, _: &()) -> proc::Result {
+    fn execute(self) -> proc::Result {
         let sum = self.run();
         if sum > u8::MAX.into() {
             Err(AddError::Overflow)?

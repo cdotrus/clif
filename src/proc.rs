@@ -3,7 +3,26 @@ use crate::cli::Cli;
 
 pub type Result = std::result::Result<(), Box<dyn std::error::Error>>;
 
-pub trait Program<T>: Sized {
+pub trait Program: Sized {
+    /// Collects tokens from the command-line interface to define a struct's fields.
+    ///
+    /// The recommended argument discovery order is
+    /// 1. `flags`
+    /// 2. `optionals`
+    /// 3. `positionals`
+    /// 4. `subcommands`
+    ///
+    /// It is considered a programmer's error if the arguments are not processed
+    /// in the specified order by their type.
+    fn parse(cli: &mut Cli) -> cli::Result<Self>;
+
+    /// Run the backend logic for this command.
+    ///
+    /// This function owns the self structure.
+    fn execute(self) -> Result;
+}
+
+pub trait Subprogram<T>: Sized {
     /// Collects tokens from the command-line interface to define a struct's fields.
     ///
     /// The recommended argument discovery order is
@@ -41,7 +60,7 @@ mod test {
         verbose: bool,
     }
 
-    impl Program<()> for Add {
+    impl Subprogram<()> for Add {
         fn parse(cli: &mut Cli) -> cli::Result<Self> {
             cli.check_help(Help::new().text("Usage: add <lhs> <rhs> [--verbose]"))?;
             // the ability to "learn options" beforehand is possible, or can be skipped
@@ -79,7 +98,7 @@ mod test {
         command: Option<OpSubcommand>,
     }
 
-    impl Program<()> for Op {
+    impl Program for Op {
         fn parse(cli: &mut Cli) -> cli::Result<Self> {
             let m = Ok(Op {
                 force: cli.check_flag(Flag::new("force"))?,
@@ -90,9 +109,9 @@ mod test {
             m
         }
 
-        fn execute(self, context: &()) -> Result {
+        fn execute(self) -> Result {
             if let Some(command) = self.command {
-                command.execute(context)
+                command.execute(&())
             } else {
                 Ok(())
             }
@@ -104,7 +123,7 @@ mod test {
         Add(Add),
     }
 
-    impl Program<()> for OpSubcommand {
+    impl Subprogram<()> for OpSubcommand {
         fn parse(cli: &mut Cli) -> cli::Result<Self> {
             match cli.match_command(&["add", "mult", "sub"])?.as_ref() {
                 "add" => Ok(OpSubcommand::Add(Add::parse(cli)?)),
@@ -112,9 +131,9 @@ mod test {
             }
         }
 
-        fn execute(self, _: &()) -> Result {
+        fn execute(self, c: &()) -> Result {
             match self {
-                OpSubcommand::Add(c) => c.execute(&()),
+                OpSubcommand::Add(op) => op.execute(&c),
             }
         }
     }

@@ -2,7 +2,7 @@ use cliproc::*;
 use std::env;
 
 fn main() -> ExitCode {
-    Cli::default().tokenize(env::args()).go::<(), Demo>(())
+    Cli::default().tokenize(env::args()).go::<Demo>()
 }
 
 struct Demo {
@@ -10,7 +10,7 @@ struct Demo {
     count: u8,
 }
 
-impl Program<()> for Demo {
+impl Program for Demo {
     fn parse(cli: &mut Cli) -> cli::Result<Self> {
         cli.check_help(Help::default().text(HELP))?;
         Ok(Demo {
@@ -21,7 +21,7 @@ impl Program<()> for Demo {
         })
     }
 
-    fn execute(self, _: &()) -> proc::Result {
+    fn execute(self) -> proc::Result {
         for _ in 0..self.count {
             println!("Hello {}!", self.name);
         }
@@ -35,8 +35,11 @@ A fast, low-level, and configurable command-line processor.
 Usage:
     demo [options] <name>
 
-Options:
+Arguments:
     <name>                  Name of the person to greet
+    
+Options:
+    <name>                  
     --count, -c <count>     Number of times to greet (default: 1)
     --help, -h              Print this help information and exit
 ";

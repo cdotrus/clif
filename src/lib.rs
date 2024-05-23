@@ -9,7 +9,7 @@ pub mod proc;
 pub use arg::{Flag, Optional, Positional};
 pub use cli::Cli;
 pub use help::Help;
-pub use proc::Program;
+pub use proc::{Program, Subprogram};
 pub use std::process::ExitCode;
 
 #[cfg(test)]
@@ -40,7 +40,7 @@ mod tests {
             }
         }
 
-        impl Program<()> for Radd {
+        impl Program for Radd {
             fn parse(cli: &mut Cli) -> Result<Self, error::Error> {
                 // set help text in case of an error
                 cli.check_help(help::Help::new().text(HELP))?;
@@ -54,7 +54,7 @@ mod tests {
                 Ok(radd)
             }
 
-            fn execute(self, _: &()) -> Result<(), Box<dyn std::error::Error>> {
+            fn execute(self) -> Result<(), Box<dyn std::error::Error>> {
                 let sum: u16 = self.run();
                 if self.verbose == true {
                     println!("{} + {} = {}", self.lhs, self.rhs, sum);

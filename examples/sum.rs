@@ -5,7 +5,7 @@ use cliproc::{Cli, ExitCode, Program};
 use cliproc::{Flag, Help, Positional};
 
 fn main() -> ExitCode {
-    Cli::default().tokenize(env::args()).go::<(), Sum>(())
+    Cli::default().tokenize(env::args()).go::<Sum>()
 }
 
 type Digit = f32;
@@ -24,7 +24,7 @@ impl Sum {
     }
 }
 
-impl Program<()> for Sum {
+impl Program for Sum {
     fn parse(cli: &mut Cli) -> cli::Result<Self> {
         // set short help text in case of an error
         cli.check_help(Help::default().text(HELP))?;
@@ -34,7 +34,7 @@ impl Program<()> for Sum {
         })
     }
 
-    fn execute(self, _: &()) -> proc::Result {
+    fn execute(self) -> proc::Result {
         let sum: Digit = self.run();
         if self.verbose == true {
             println!("{:?} = {}", self.nums, sum);

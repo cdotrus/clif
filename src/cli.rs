@@ -2,7 +2,7 @@ use crate::error::{self, CapMode};
 use crate::help::Help;
 use crate::seqalin;
 use crate::seqalin::Cost;
-use crate::{arg::*, Program};
+use crate::{arg::*, Program, Subprogram};
 use colored::Colorize;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -338,7 +338,7 @@ impl Cli {
     /// Determines if an `UnattachedArg` exists to be served as a subcommand.
     ///
     /// If so, it will call `from_cli` on the type defined. If not, it will return none.
-    pub fn check_command<'a, T: Program<U>, U>(&mut self, p: Positional) -> Result<Option<T>> {
+    pub fn check_command<'a, T: Subprogram<U>, U>(&mut self, p: Positional) -> Result<Option<T>> {
         self.known_args.push(Arg::Positional(p));
         // check but do not remove if an unattached arg exists
         let command_exists = self
@@ -971,7 +971,7 @@ impl Cli {
 
 impl Cli {
     /// Glues the interface layer and backend logic for a smooth hand-off of data.
-    pub fn go<U, T: Program<U>>(mut self, context: U) -> ExitCode {
+    pub fn go<T: Program>(mut self) -> ExitCode {
         match T::parse(&mut self) {
             // construct the application
             Ok(program) => {
@@ -980,7 +980,7 @@ impl Cli {
                     Ok(_) => {
                         let cap_mode = self.cap_mode;
                         std::mem::drop(self);
-                        match program.execute(&context) {
+                        match program.execute() {
                             Ok(_) => ExitCode::from(0),
                             Err(err) => {
                                 eprintln!(
