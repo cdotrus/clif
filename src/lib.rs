@@ -23,71 +23,110 @@ mod tests {
         Box::new(args.into_iter().map(|f| f.to_string()).into_iter())
     }
 
-    mod radd {
+    mod add {
         use super::*;
 
-        /// `Radd` is 'rust-add' that can add two unsigned 8-bit values together.
-        #[derive(PartialEq, Debug)]
-        struct Radd {
-            lhs: u8,
-            rhs: u8,
-            verbose: bool,
-        }
+        mod ok {
+            use super::*;
 
-        impl Radd {
-            fn run(&self) -> u16 {
-                self.lhs as u16 + self.rhs as u16
-            }
-        }
-
-        impl Command for Radd {
-            fn parse(cli: &mut Cli) -> Result<Self, error::Error> {
-                // set help text in case of an error
-                cli.check_help(help::Help::new().text(HELP))?;
-                let radd = Radd {
-                    verbose: cli.check_flag(Flag::new("verbose"))?,
-                    lhs: cli.require_positional(Positional::new("lhs"))?,
-                    rhs: cli.require_positional(Positional::new("rhs"))?,
-                };
-                // optional: verify the cli has no additional arguments if this is the top-level command being parsed
-                cli.is_empty()?;
-                Ok(radd)
+            #[derive(PartialEq, Debug)]
+            struct Add {
+                lhs: u8,
+                rhs: u8,
+                verbose: bool,
             }
 
-            fn execute(self) -> Result<(), Box<dyn std::error::Error>> {
-                let sum: u16 = self.run();
-                if self.verbose == true {
-                    println!("{} + {} = {}", self.lhs, self.rhs, sum);
-                } else {
-                    println!("{}", sum);
+            impl Add {
+                fn run(&self) -> u16 {
+                    self.lhs as u16 + self.rhs as u16
                 }
-                Ok(())
+            }
+
+            impl Command for Add {
+                fn parse(cli: &mut Cli) -> cli::Result<Self> {
+                    // set help text in case of an error
+                    cli.check_help(Help::default().text(String::new()))?;
+                    let radd = Add {
+                        verbose: cli.check_flag(Flag::new("verbose"))?,
+                        lhs: cli.require_positional(Positional::new("lhs"))?,
+                        rhs: cli.require_positional(Positional::new("rhs"))?,
+                    };
+                    // optional: verify the cli has no additional arguments if this is the top-level command being parsed
+                    cli.is_empty()?;
+                    Ok(radd)
+                }
+
+                fn execute(self) -> proc::Result {
+                    let sum: u16 = self.run();
+                    if self.verbose == true {
+                        println!("{} + {} = {}", self.lhs, self.rhs, sum);
+                    } else {
+                        println!("{}", sum);
+                    }
+                    Ok(())
+                }
+            }
+
+            #[test]
+            fn it_add_program() {
+                let mut cli = Cli::new()
+                    .threshold(4)
+                    .tokenize(args(vec!["add", "45", "17"]));
+                let program = Add::parse(&mut cli).unwrap();
+                std::mem::drop(cli);
+                assert_eq!(program.run(), 62);
             }
         }
 
-        #[test]
-        fn program_radd() {
-            let mut cli = Cli::new()
-                .threshold(4)
-                .tokenize(args(vec!["radd", "9", "10"]));
-            let program = Radd::parse(&mut cli).unwrap();
-            std::mem::drop(cli);
+        mod bad {
+            use super::*;
 
-            assert_eq!(program.run(), 19);
+            #[derive(PartialEq, Debug)]
+            struct Add {
+                lhs: u8,
+                rhs: u8,
+                verbose: bool,
+            }
+
+            impl Add {
+                fn run(&self) -> u16 {
+                    self.lhs as u16 + self.rhs as u16
+                }
+            }
+
+            impl Command for Add {
+                fn parse(cli: &mut Cli) -> cli::Result<Self> {
+                    // set help text in case of an error
+                    cli.check_help(Help::default().text(String::new()))?;
+                    let radd = Add {
+                        lhs: cli.require_positional(Positional::new("lhs"))?,
+                        verbose: cli.check_flag(Flag::new("verbose"))?,
+                        rhs: cli.require_positional(Positional::new("rhs"))?,
+                    };
+                    // optional: verify the cli has no additional arguments if this is the top-level command being parsed
+                    cli.is_empty()?;
+                    Ok(radd)
+                }
+
+                fn execute(self) -> proc::Result {
+                    let sum: u16 = self.run();
+                    if self.verbose == true {
+                        println!("{} + {} = {}", self.lhs, self.rhs, sum);
+                    } else {
+                        println!("{}", sum);
+                    }
+                    Ok(())
+                }
+            }
+
+            #[test]
+            #[should_panic]
+            fn it_add_program() {
+                let mut cli = Cli::new()
+                    .threshold(4)
+                    .tokenize(args(vec!["add", "45", "17"]));
+                let _ = Add::parse(&mut cli);
+            }
         }
-
-        const HELP: &str = "\
-Adds two numbers together.
-
-Usage:
-    radd [options] <lhs> <rhs> 
-
-Args:
-    <lhs>       left-hand operand
-    <rhs>       right-hand operand
-    
-Options:
-    --verbose   display computation work
-";
     }
 }
