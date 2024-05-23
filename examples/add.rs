@@ -4,7 +4,7 @@ use std::fmt::Display;
 
 use cliproc::cli;
 use cliproc::proc;
-use cliproc::{Cli, Program};
+use cliproc::{Cli, Command};
 use cliproc::{Flag, Help, Positional};
 
 use std::process::ExitCode;
@@ -39,7 +39,7 @@ impl Display for AddError {
 
 impl Error for AddError {}
 
-impl Program for Add {
+impl Command for Add {
     fn parse(cli: &mut Cli) -> cli::Result<Self> {
         cli.check_help(Help::default().text(HELP))?;
         Ok(Add {

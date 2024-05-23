@@ -10,14 +10,14 @@ struct Demo {
     count: u8,
 }
 
-impl Program for Demo {
+impl Command for Demo {
     fn parse(cli: &mut Cli) -> cli::Result<Self> {
         cli.check_help(Help::default().text(HELP))?;
         Ok(Demo {
-            name: cli.require_positional(Positional::new("name"))?,
             count: cli
                 .check_option(Optional::new("count").switch('c'))?
                 .unwrap_or(1),
+            name: cli.require_positional(Positional::new("name"))?,
         })
     }
 

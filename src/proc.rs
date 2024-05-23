@@ -3,7 +3,7 @@ use crate::cli::Cli;
 
 pub type Result = std::result::Result<(), Box<dyn std::error::Error>>;
 
-pub trait Program: Sized {
+pub trait Command: Sized {
     /// Collects tokens from the command-line interface to define a struct's fields.
     ///
     /// The recommended argument discovery order is
@@ -22,7 +22,7 @@ pub trait Program: Sized {
     fn execute(self) -> Result;
 }
 
-pub trait Subprogram<T>: Sized {
+pub trait Subcommand<T>: Sized {
     /// Collects tokens from the command-line interface to define a struct's fields.
     ///
     /// The recommended argument discovery order is
@@ -60,7 +60,7 @@ mod test {
         verbose: bool,
     }
 
-    impl Subprogram<()> for Add {
+    impl Subcommand<()> for Add {
         fn parse(cli: &mut Cli) -> cli::Result<Self> {
             cli.check_help(Help::new().text("Usage: add <lhs> <rhs> [--verbose]"))?;
             // the ability to "learn options" beforehand is possible, or can be skipped
@@ -98,7 +98,7 @@ mod test {
         command: Option<OpSubcommand>,
     }
 
-    impl Program for Op {
+    impl Command for Op {
         fn parse(cli: &mut Cli) -> cli::Result<Self> {
             let m = Ok(Op {
                 force: cli.check_flag(Flag::new("force"))?,
@@ -123,7 +123,7 @@ mod test {
         Add(Add),
     }
 
-    impl Subprogram<()> for OpSubcommand {
+    impl Subcommand<()> for OpSubcommand {
         fn parse(cli: &mut Cli) -> cli::Result<Self> {
             match cli.match_command(&["add", "mult", "sub"])?.as_ref() {
                 "add" => Ok(OpSubcommand::Add(Add::parse(cli)?)),

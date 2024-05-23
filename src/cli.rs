@@ -2,7 +2,7 @@ use crate::error::{self, CapMode};
 use crate::help::Help;
 use crate::seqalin;
 use crate::seqalin::Cost;
-use crate::{arg::*, Program, Subprogram};
+use crate::{arg::*, Command, Subcommand};
 use colored::Colorize;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -103,13 +103,41 @@ impl Slot {
     }
 }
 
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
+enum ParserState {
+    Start,
+    ProcessingFlags,
+    ProcessingOptionals,
+    ProcessingPositionals,
+    ProcessingSubcommands,
+    End,
+}
+
+impl ParserState {
+    /// Ensures the previous state (`self`) can transition to the next state (`next`).
+    pub fn proceed(&mut self, mut next: ParserState) {
+        // panic if we are already advanced past the next state
+        if self > &mut next {
+            panic!("{}: argument discovery is in an invalid order: invalid state transition from {:?} to {:?}", "panic!".red().bold().underline(), self, next)
+        }
+        // println!("{:?} -> {:?}", self, next);
+        *self = next;
+    }
+
+    pub fn reset() -> Self {
+        Self::Start
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Cli {
     tokens: Vec<Option<Token>>,
     opt_store: HashMap<Tag<String>, Slot>,
     known_args: Vec<Arg>,
-    help: Option<Help>,
     asking_for_help: bool,
+    state: ParserState,
+    // external attributes
+    help: Option<Help>,
     prioritize_help: bool,
     cap_mode: CapMode,
     threshold: Cost,
@@ -126,6 +154,7 @@ impl Default for Cli {
             prioritize_help: true,
             cap_mode: CapMode::default(),
             threshold: 2,
+            state: ParserState::Start,
         }
     }
 }
@@ -142,6 +171,7 @@ impl Cli {
             cap_mode: CapMode::Manual,
             prioritize_help: true,
             threshold: 0,
+            state: ParserState::Start,
         }
     }
 
@@ -338,7 +368,7 @@ impl Cli {
     /// Determines if an `UnattachedArg` exists to be served as a subcommand.
     ///
     /// If so, it will call `from_cli` on the type defined. If not, it will return none.
-    pub fn check_command<'a, T: Subprogram<U>, U>(&mut self, p: Positional) -> Result<Option<T>> {
+    pub fn check_command<'a, T: Subcommand<U>, U>(&mut self, p: Positional) -> Result<Option<T>> {
         self.known_args.push(Arg::Positional(p));
         // check but do not remove if an unattached arg exists
         let command_exists = self
@@ -349,9 +379,14 @@ impl Cli {
                 _ => false,
             })
             .is_some();
-        if command_exists {
-            Ok(Some(T::parse(self)?))
+        if command_exists == true {
+            // reset the parser state upon entering new subcommand
+            self.state = ParserState::reset();
+            let sub = Some(T::parse(self)?);
+            self.state.proceed(ParserState::ProcessingSubcommands);
+            Ok(sub)
         } else {
+            self.state.proceed(ParserState::ProcessingSubcommands);
             return Ok(None);
         }
     }
@@ -431,6 +466,7 @@ impl Cli {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
+        self.state.proceed(ParserState::ProcessingPositionals);
         self.known_args.push(Arg::Positional(p));
         self.try_positional()
     }
@@ -471,6 +507,7 @@ impl Cli {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
+        self.state.proceed(ParserState::ProcessingPositionals);
         if let Some(value) = self.check_positional(p)? {
             Ok(value)
         } else {
@@ -494,6 +531,7 @@ impl Cli {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
+        self.state.proceed(ParserState::ProcessingPositionals);
         let mut result = Vec::<T>::new();
         result.push(self.require_positional(p)?);
         while let Some(v) = self.try_positional()? {
@@ -553,6 +591,7 @@ impl Cli {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
+        self.state.proceed(ParserState::ProcessingOptionals);
         // collect information on where the flag can be found
         let mut locs = self.take_flag_locs(o.get_flag().get_name());
         if let Some(c) = o.get_flag().get_switch() {
@@ -615,6 +654,7 @@ impl Cli {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
+        self.state.proceed(ParserState::ProcessingOptionals);
         let values = self.check_option_all::<T>(o)?;
         match values {
             // verify the size of the vector does not exceed `n`
@@ -638,6 +678,7 @@ impl Cli {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
+        self.state.proceed(ParserState::ProcessingOptionals);
         // collect information on where the flag can be found
         let mut locs = self.take_flag_locs(o.get_flag().get_name());
         if let Some(c) = o.get_flag().get_switch() {
@@ -687,6 +728,7 @@ impl Cli {
     ///
     /// Errors if the flag has an attached value or was raised multiple times.
     pub fn check_flag<'a>(&mut self, f: Flag) -> Result<bool> {
+        self.state.proceed(ParserState::ProcessingFlags);
         let occurences = self.check_flag_all(f)?;
         match occurences > 1 {
             true => {
@@ -707,6 +749,7 @@ impl Cli {
     ///
     /// Errors if the flag has an attached value. Returning a zero indicates the flag was never raised.
     pub fn check_flag_all<'a>(&mut self, f: Flag) -> Result<usize> {
+        self.state.proceed(ParserState::ProcessingFlags);
         // collect information on where the flag can be found
         let mut locs = self.take_flag_locs(f.get_name());
         // try to find the switch locations
@@ -750,6 +793,7 @@ impl Cli {
     ///
     /// Errors if the flag has an attached value. Returning a zero indicates the flag was never raised.
     pub fn check_flag_n<'a>(&mut self, f: Flag, n: usize) -> Result<usize> {
+        self.state.proceed(ParserState::ProcessingFlags);
         let occurences = self.check_flag_all(f)?;
         // verify the size of the vector does not exceed `n`
         match occurences <= n {
@@ -844,7 +888,8 @@ impl Cli {
     /// Verifies there are no more tokens remaining in the stream.
     ///
     /// Note this mutates the referenced self only if an error is found.
-    pub fn is_empty<'a>(&'a self) -> Result<()> {
+    pub fn is_empty<'a>(&'a mut self) -> Result<()> {
+        self.state.proceed(ParserState::End);
         self.prioritize_help()?;
         // check if map is empty, and return the minimum found index.
         if let Some((prefix, key, _)) = self.capture_bad_flag(self.tokens.len())? {
@@ -971,7 +1016,7 @@ impl Cli {
 
 impl Cli {
     /// Glues the interface layer and backend logic for a smooth hand-off of data.
-    pub fn go<T: Program>(mut self) -> ExitCode {
+    pub fn go<T: Command>(mut self) -> ExitCode {
         match T::parse(&mut self) {
             // construct the application
             Ok(program) => {
@@ -1208,7 +1253,7 @@ mod test {
         // unexpected '--'
         assert!(cli.is_empty().is_err());
 
-        let cli = Cli::new().tokenize(args(vec![
+        let mut cli = Cli::new().tokenize(args(vec![
             "orbit",
             "--help",
             "new",

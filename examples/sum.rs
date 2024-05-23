@@ -1,7 +1,7 @@
 use std::env;
 
 use cliproc::{cli, proc};
-use cliproc::{Cli, ExitCode, Program};
+use cliproc::{Cli, Command, ExitCode};
 use cliproc::{Flag, Help, Positional};
 
 fn main() -> ExitCode {
@@ -24,7 +24,7 @@ impl Sum {
     }
 }
 
-impl Program for Sum {
+impl Command for Sum {
     fn parse(cli: &mut Cli) -> cli::Result<Self> {
         // set short help text in case of an error
         cli.check_help(Help::default().text(HELP))?;
