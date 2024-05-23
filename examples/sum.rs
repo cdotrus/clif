@@ -1,8 +1,8 @@
 use std::env;
 
-use clif::{Cli, Help};
-use clif::{CliResult, Climb, CommandResult};
-use clif::{Flag, Positional};
+use cliproc::{Cli, Help};
+use cliproc::{CliResult, Climb, CommandResult};
+use cliproc::{Flag, Positional};
 
 fn main() {
     std::process::exit(Cli::default().tokenize(env::args()).go::<(), Sum>(()) as i32)

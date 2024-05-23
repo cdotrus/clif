@@ -1,36 +1,10 @@
 # Changelog
 
-## 0.1.5
-
-### Fixes
-
-- updates dependencies
-
-## 0.1.3
-
-### Fixes
-
-- `color` features now presents proper `color()` function instead of erroring during compilation due to misnamed duplicate function
-
-## 0.1.2
-
-### Changes
-
-- adds `color()` builder function for `Cli` struct (enabled by default)
-
-- internal argument data is stored as `String` without lifetime dependency on `Cli` struct to allow for better code structuring and usage in from the `Cli` struct
-
-## 0.1.1
-
-### Features
-
-- adds `Error::validate(...)` function to transform any error into a `CliError` during cli parsing 
-
 ## 0.1.0
 
-### Features
+### Features 
 
-- long options (flags/options)): `--verbose`
+- long options (flags/options): `--verbose`
 - short options (switches): `-v`
 - positional value placement: `--output a.out`, `-o a.out`
 - attached value placement: `--output=a.out`, `-o=a.out`
@@ -44,7 +18,6 @@
 - ability to enable/disable a help flag with custom long/short flag names
 - subcommand support: `calc add 10 20`, `calc mult 10 20`
 - arguments can be reused in both structs for overall command and nested subcommand
-- zero dependencies (use the `color` feature for coloring)
 - uses dynamic programming sequence alignment algorithm to detect misspelled arguments (with configurable `threshold` for string comparison)
 - ability to set user-defined help text before parsing
 - ability to verify there are no unused arguments passed in the cli

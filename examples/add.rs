@@ -2,9 +2,9 @@ use std::env;
 use std::error::Error;
 use std::fmt::Display;
 
-use clif::Help;
-use clif::{Cli, CliResult, Climb, CommandResult};
-use clif::{Flag, Positional};
+use cliproc::Help;
+use cliproc::{Cli, CliResult, Climb, CommandResult};
+use cliproc::{Flag, Positional};
 
 fn main() {
     std::process::exit(Cli::default().tokenize(env::args()).go::<(), Add>(()) as i32)
