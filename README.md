@@ -17,9 +17,7 @@ Arguments are learned as-they-go: the cli parsing framework learns each argument
 3. positionals
 4. subcommands
 
-For a type to be accepted by the command-line, it must implement the standard library's [`std::str::FromStr`] trait.
-
-[`std::str::FromStr`]: (https://doc.rust-lang.org/std/str/trait.FromStr.html)
+For a type to be accepted by the command-line, it must implement the standard library's [`std::str::FromStr`](https://doc.rust-lang.org/std/str/trait.FromStr.html) trait.
 
 ## Features
 
