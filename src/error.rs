@@ -1,9 +1,20 @@
-#[cfg(feature = "color")]
-use crayon::*;
-
 use crate::arg::Arg;
 use crate::help::Help;
+use colored::Colorize;
 use std::fmt::Display;
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum CapMode {
+    Upper,
+    Lower,
+    Manual,
+}
+
+impl Default for CapMode {
+    fn default() -> Self {
+        Self::Lower
+    }
+}
 
 const NEW_PARAGRAPH: &str = "\n\n";
 
@@ -22,11 +33,21 @@ type Argument = String;
 
 #[derive(Debug)]
 pub struct Error {
-    #[cfg(feature = "color")]
-    use_color: bool,
     context: ErrorContext,
+    cap_mode: CapMode,
     help: Option<Help>,
     kind: ErrorKind,
+}
+
+impl From<Box<dyn std::error::Error>> for Error {
+    fn from(value: Box<dyn std::error::Error>) -> Self {
+        Self::new(
+            None,
+            ErrorKind::CustomRule,
+            ErrorContext::CustomRule(value),
+            CapMode::default(),
+        )
+    }
 }
 
 impl Error {
@@ -35,14 +56,13 @@ impl Error {
         help: Option<Help>,
         kind: ErrorKind,
         context: ErrorContext,
-        _use_color: bool,
+        cap_mode: CapMode,
     ) -> Self {
         Self {
-            #[cfg(feature = "color")]
-            use_color: _use_color,
             help: help,
             kind: kind,
             context: context,
+            cap_mode: cap_mode,
         }
     }
 
@@ -67,14 +87,10 @@ impl Error {
     /// Constructs a simple help tip to insert into an error message if help exists.
     fn help_tip(&self) -> Option<String> {
         let flag_str = self.help.as_ref()?.get_flag().to_string();
-        #[cfg(feature = "color")]
-        let flag_str = match self.use_color {
-            true => flag_str.green().to_string(),
-            false => flag_str,
-        };
         Some(format!(
             "{}For more information, try '{}'.",
-            NEW_PARAGRAPH, flag_str
+            NEW_PARAGRAPH,
+            flag_str.green()
         ))
     }
 
@@ -86,7 +102,7 @@ impl Error {
                 None,
                 ErrorKind::CustomRule,
                 ErrorContext::CustomRule(Box::new(e)),
-                false,
+                CapMode::default(),
             )),
         }
     }
@@ -126,137 +142,131 @@ pub enum ErrorKind {
 
 impl std::error::Error for Error {}
 
+/// Capitalizes a sentence by converting the first character to uppercase (if possible).
+pub fn capitalize(s: String) -> String {
+    s.char_indices()
+        .map(|(i, c)| if i == 0 { c.to_ascii_uppercase() } else { c })
+        .collect()
+}
+
+/// De-capitalizes a sentence by converting the first character to uppercase (if possible).
+pub fn lowerize(s: String) -> String {
+    s.char_indices()
+        .map(|(i, c)| if i == 0 { c.to_ascii_lowercase() } else { c })
+        .collect()
+}
+
+pub fn format_err_msg(s: String, cap_mode: CapMode) -> String {
+    match cap_mode {
+        CapMode::Upper => capitalize(s),
+        CapMode::Lower => lowerize(s),
+        CapMode::Manual => s,
+    }
+}
+
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        #[cfg(feature = "color")]
-        let color = |a: ColoredString| -> String {
-            match self.use_color {
-                true => a.to_string(),
-                false => a.get_data().to_string(),
-            }
-        };
-
         match self.context() {
             ErrorContext::ExceededThreshold(arg, cur, max) => {
-                let arg_str = arg.to_string();
-                #[cfg(feature = "color")]
-                let arg_str = color(arg_str.blue());
                 write!(
                     f,
-                    "option '{}' can be used up to {} times but was supplied {} times",
-                    arg_str, max, cur
+                    "Option '{}' can be used up to {} times but was supplied {} times",
+                    arg.to_string().blue(),
+                    max,
+                    cur
                 )
             }
             ErrorContext::Help => {
                 write!(
                     f,
                     "{}",
-                    self.help.as_ref().unwrap_or(&Help::new()).get_quick_text()
+                    self.help.as_ref().unwrap_or(&Help::new()).get_text()
                 )
             }
             ErrorContext::FailedCast(arg, val, err) => {
-                let arg_str = arg.to_string();
-                #[cfg(feature = "color")]
-                let arg_str = color(arg_str.blue());
-                let val_str = val.to_string();
-                #[cfg(feature = "color")]
-                let val_str = color(val_str.yellow());
                 write!(
                     f,
-                    "argument '{}' failed to process '{}' due to: {}",
-                    arg_str, val_str, err
+                    "Argument '{}' failed to process value '{}': {}",
+                    arg.to_string().blue(),
+                    val.to_string().yellow(),
+                    format_err_msg(err.to_string(), self.cap_mode)
                 )
             }
             ErrorContext::FailedArg(arg) => match self.kind() {
                 ErrorKind::MissingPositional => {
-                    let usage = match self.help.as_ref().unwrap_or(&Help::new()).get_usage() {
-                        Some(m) => NEW_PARAGRAPH.to_owned() + m,
-                        None => "".to_owned(),
-                    };
-                    let arg_str = arg.to_string();
-                    #[cfg(feature = "color")]
-                    let arg_str = color(arg_str.blue());
-                    write!(f, "missing positional argument '{}'{}", arg_str, usage)
+                    write!(
+                        f,
+                        "Missing positional argument '{}'{}",
+                        arg.to_string().blue(),
+                        self.help_tip().unwrap_or(String::new())
+                    )
                 }
                 ErrorKind::DuplicateOptions => {
-                    let arg_str = arg.to_string();
-                    #[cfg(feature = "color")]
-                    let arg_str = color(arg_str.blue());
-                    write!(f, "argument '{}' can only be supplied once", arg_str)
+                    write!(
+                        f,
+                        "Argument '{}' can only be supplied once",
+                        arg.to_string().blue()
+                    )
                 }
                 ErrorKind::ExpectingValue => {
-                    let arg_str = arg.to_string();
-                    #[cfg(feature = "color")]
-                    let arg_str = color(arg_str.blue());
-                    write!(f, "option '{}' takes 1 value but 0 was supplied", arg_str)
+                    write!(
+                        f,
+                        "Option '{}' accepts one value but zero were supplied",
+                        arg.to_string().blue()
+                    )
                 }
                 _ => panic!("reached unreachable error kind for a failed argument error context"),
             },
             ErrorContext::SuggestWord(word, suggestion) => match self.kind() {
                 ErrorKind::SuggestArg => {
-                    #[cfg(feature = "color")]
-                    let word = color(word.yellow());
-                    #[cfg(feature = "color")]
-                    let suggestion = color(suggestion.green());
                     write!(
                         f,
-                        "invalid argument '{}'{}Did you mean '{}'?",
-                        word, NEW_PARAGRAPH, suggestion
+                        "Invalid argument '{}'{}Did you mean '{}'?",
+                        word.yellow(),
+                        NEW_PARAGRAPH,
+                        suggestion.green()
                     )
                 }
                 ErrorKind::SuggestSubcommand => {
-                    #[cfg(feature = "color")]
-                    let word = color(word.yellow());
-                    #[cfg(feature = "color")]
-                    let suggestion = color(suggestion.green());
                     write!(
                         f,
-                        "invalid subcommand '{}'{}Did you mean '{}'?",
-                        word, NEW_PARAGRAPH, suggestion
+                        "Invalid subcommand '{}'{}Did you mean '{}'?",
+                        word.yellow(),
+                        NEW_PARAGRAPH,
+                        suggestion.green()
                     )
                 }
                 _ => panic!("reached unreachable error kind for a failed argument error context"),
             },
             ErrorContext::OutofContextArgSuggest(arg, subcommand) => {
-                let arg_str = arg.to_string();
-                #[cfg(feature = "color")]
-                let arg_str = color(arg_str.yellow());
-                #[cfg(feature = "color")]
-                let subcommand = color(subcommand.green());
-                write!(f, "argument '{}' is unknown or invalid in the current context{}Maybe move it after '{}'?", arg_str, NEW_PARAGRAPH, subcommand)
+                write!(f, "Argument '{}' is unknown or invalid in the current context{}Maybe move it after '{}'?", arg.yellow(), NEW_PARAGRAPH, subcommand.green())
             }
             ErrorContext::UnexpectedValue(flag, val) => {
-                let flag_str = flag.to_string();
-                #[cfg(feature = "color")]
-                let flag_str = color(flag_str.blue());
-                #[cfg(feature = "color")]
-                let val = color(val.yellow());
                 write!(
                     f,
-                    "flag '{}' cannot accept a value but was given '{}'",
-                    flag_str, val
+                    "Flag '{}' cannot accept a value but was given '{}'",
+                    flag.to_string().blue(),
+                    val.yellow()
                 )
             }
             ErrorContext::UnexpectedArg(word) => {
-                #[cfg(feature = "color")]
-                let word = color(word.yellow());
                 write!(
                     f,
-                    "invalid argument '{}'{}",
-                    word,
+                    "Invalid argument '{}'{}",
+                    word.yellow(),
                     self.help_tip().unwrap_or(String::new())
                 )
             }
             ErrorContext::UnknownSubcommand(arg, subcommand) => {
-                #[cfg(feature = "color")]
-                let subcommand = color(subcommand.yellow());
-                let arg_str = arg.to_string();
-                #[cfg(feature = "color")]
-                let arg_str = color(arg_str.blue());
-                write!(f, "invalid subcommand '{}' for '{}'", subcommand, arg_str)
+                write!(
+                    f,
+                    "Invalid subcommand '{}' for '{}'",
+                    subcommand.yellow(),
+                    arg.to_string().blue()
+                )
             }
             ErrorContext::CustomRule(err) => {
-                write!(f, "{}", err)
+                write!(f, "{}", format_err_msg(err.to_string(), self.cap_mode))
             }
         }?;
         Ok(())

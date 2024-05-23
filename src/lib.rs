@@ -1,26 +1,15 @@
+mod arg;
 mod cli;
 mod command;
 mod error;
 mod help;
 mod seqalin;
 
-pub mod arg;
-
+pub use arg::{Flag, Optional, Positional};
 pub use cli::Cli;
-pub use error::Error;
-pub use error::ErrorContext;
-pub use error::ErrorKind;
+pub use command::{CliResult, Climb, CommandResult};
+pub use error::{Error, ErrorContext, ErrorKind};
 pub use help::Help;
-
-pub mod cmd {
-    pub use super::command::Command;
-    pub use super::command::FromCli;
-    pub use super::command::Runner;
-}
-
-// pub use arg::Flag;
-// pub use arg::Optional;
-// pub use arg::Positional;
 
 #[cfg(test)]
 mod tests {
@@ -35,7 +24,6 @@ mod tests {
 
     mod radd {
         use super::*;
-        use crate::command::{Command, FromCli, Runner};
 
         /// `Radd` is 'rust-add' that can add two unsigned 8-bit values together.
         #[derive(PartialEq, Debug)]
@@ -51,15 +39,13 @@ mod tests {
             }
         }
 
-        impl Runner<()> for Radd {}
-
-        impl FromCli for Radd {
+        impl Climb<()> for Radd {
             fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, error::Error>
             where
                 Self: Sized,
             {
                 // set help text in case of an error
-                cli.check_help(help::Help::new().quick_text(HELP))?;
+                cli.check_help(help::Help::new().text(HELP))?;
                 let radd = Radd {
                     verbose: cli.check_flag(Flag::new("verbose"))?,
                     lhs: cli.require_positional(Positional::new("lhs"))?,
@@ -69,18 +55,15 @@ mod tests {
                 cli.is_empty()?;
                 Ok(radd)
             }
-        }
 
-        impl Command<()> for Radd {
-            type Status = ();
-
-            fn exec(&self, _: &()) -> Self::Status {
+            fn execute(self, _: &()) -> Result<(), Box<dyn std::error::Error>> {
                 let sum: u16 = self.run();
                 if self.verbose == true {
                     println!("{} + {} = {}", self.lhs, self.rhs, sum);
                 } else {
                     println!("{}", sum);
                 }
+                Ok(())
             }
         }
 

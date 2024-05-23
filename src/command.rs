@@ -1,13 +1,10 @@
 use crate::cli::Cli;
 use crate::error::Error;
-use std::fmt::Debug;
 
-pub trait Command<T>: Debug {
-    type Status;
-    fn exec(&self, context: &T) -> Self::Status;
-}
+pub type CommandResult = Result<(), Box<dyn std::error::Error>>;
+pub type CliResult<T> = Result<T, Error>;
 
-pub trait FromCli {
+pub trait Climb<T>: Sized {
     /// Collects tokens from the command-line interface to define a struct's fields.
     ///
     /// The recommended argument discovery order is
@@ -15,12 +12,16 @@ pub trait FromCli {
     /// 2. `optionals`
     /// 3. `positionals`
     /// 4. `subcommands`
-    fn from_cli(cli: &mut Cli) -> Result<Self, Error>
-    where
-        Self: Sized;
-}
+    ///
+    /// It is considered a programmer's error if the arguments are not processed
+    /// in the specified order by their type.
+    fn from_cli(cli: &mut Cli) -> CliResult<Self>;
 
-pub trait Runner<T>: Command<T> + FromCli + Debug {}
+    /// Run the backend logic for this command.
+    ///
+    /// This function owns the self structure.
+    fn execute(self, context: &T) -> CommandResult;
+}
 
 #[cfg(test)]
 mod test {
@@ -41,11 +42,22 @@ mod test {
         verbose: bool,
     }
 
-    impl Command<()> for Add {
-        type Status = ();
+    impl Climb<()> for Add {
+        fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, Error> {
+            cli.check_help(Help::new().text("Usage: add <lhs> <rhs> [--verbose]"))?;
+            // the ability to "learn options" beforehand is possible, or can be skipped
+            // "learn options" here (take in known args (as ref?))
+            Ok(Add {
+                force: cli.check_flag(Flag::new("force"))?,
+                verbose: cli.check_flag(Flag::new("verbose"))?,
+                lhs: cli.require_positional(Positional::new("lhs"))?,
+                rhs: cli.require_positional(Positional::new("rhs"))?,
+            })
+        }
 
-        fn exec(&self, _: &()) -> Self::Status {
-            println!("{}", self.run())
+        fn execute(self, _: &()) -> Result<(), Box<dyn std::error::Error>> {
+            println!("{}", self.run());
+            Ok(())
         }
     }
 
@@ -60,24 +72,6 @@ mod test {
         }
     }
 
-    impl FromCli for Add {
-        fn from_cli<'c>(cli: &'c mut Cli) -> Result<Self, Error> {
-            cli.check_help(
-                Help::new()
-                    .quick_text("    add <lhs> <rhs> [--verbose]")
-                    .ref_usage(0..0),
-            )?;
-            // the ability to "learn options" beforehand is possible, or can be skipped
-            // "learn options" here (take in known args (as ref?))
-            Ok(Add {
-                force: cli.check_flag(Flag::new("force"))?,
-                verbose: cli.check_flag(Flag::new("verbose"))?,
-                lhs: cli.require_positional(Positional::new("lhs"))?,
-                rhs: cli.require_positional(Positional::new("rhs"))?,
-            })
-        }
-    }
-
     /// Tests a nested subcommand cli structure.
     #[derive(Debug, PartialEq)]
     struct Op {
@@ -86,17 +80,7 @@ mod test {
         command: Option<OpSubcommand>,
     }
 
-    impl Command<()> for Op {
-        type Status = ();
-
-        fn exec(&self, context: &()) -> Self::Status {
-            if let Some(command) = &self.command {
-                command.exec(context)
-            }
-        }
-    }
-
-    impl FromCli for Op {
+    impl Climb<()> for Op {
         fn from_cli(cli: &mut Cli) -> Result<Self, Error> {
             let m = Ok(Op {
                 force: cli.check_flag(Flag::new("force"))?,
@@ -106,6 +90,14 @@ mod test {
             cli.is_empty()?;
             m
         }
+
+        fn execute(self, context: &()) -> Result<(), Box<dyn std::error::Error>> {
+            if let Some(command) = self.command {
+                command.execute(context)
+            } else {
+                Ok(())
+            }
+        }
     }
 
     #[derive(Debug, PartialEq)]
@@ -113,20 +105,17 @@ mod test {
         Add(Add),
     }
 
-    impl FromCli for OpSubcommand {
+    impl Climb<()> for OpSubcommand {
         fn from_cli(cli: &mut Cli) -> Result<Self, Error> {
             match cli.match_command(&["add", "mult", "sub"])?.as_ref() {
                 "add" => Ok(OpSubcommand::Add(Add::from_cli(cli)?)),
                 _ => panic!("an unimplemented command was passed through!"),
             }
         }
-    }
 
-    impl Command<()> for OpSubcommand {
-        type Status = ();
-        fn exec(&self, _: &()) -> Self::Status {
+        fn execute(self, _: &()) -> CommandResult {
             match self {
-                OpSubcommand::Add(c) => c.exec(&()),
+                OpSubcommand::Add(c) => c.execute(&()),
             }
         }
     }

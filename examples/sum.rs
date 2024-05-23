@@ -1,36 +1,11 @@
-use crayon::*;
-use std::env::args;
+use std::env;
 
-use clif::cmd::{Command, FromCli, Runner};
-use clif::Cli;
-use clif::Error;
-use clif::Help;
-use clif::{arg::*, ErrorKind};
+use clif::{Cli, Help};
+use clif::{CliResult, Climb, CommandResult};
+use clif::{Flag, Positional};
 
 fn main() {
-    std::process::exit(go() as i32)
-}
-
-/// Glues the interface layer and backend logic for a smooth hand-off of data.
-fn go() -> u8 {
-    // parse the command-line arguments
-    let mut cli = Cli::new().threshold(2).tokenize(args());
-
-    match Sum::from_cli(&mut cli) {
-        // construct the application
-        Ok(app) => {
-            std::mem::drop(cli);
-            app.exec(&())
-        }
-        // report cli error
-        Err(err) => {
-            match err.kind() {
-                ErrorKind::Help => println!("{}", &err),
-                _ => eprintln!("{}: {}", "error".red().bold(), &err),
-            }
-            err.code()
-        }
-    }
+    std::process::exit(Cli::default().tokenize(env::args()).go::<(), Sum>(()) as i32)
 }
 
 type Digit = f32;
@@ -49,48 +24,26 @@ impl Sum {
     }
 }
 
-// enforce the `Addrs` struct to implement `FromCli` and `Command<T>` traits
-impl Runner<()> for Sum {}
-
-impl FromCli for Sum {
-    fn from_cli(cli: &mut Cli) -> Result<Self, Error>
-    where
-        Self: Sized,
-    {
+impl Climb<()> for Sum {
+    fn from_cli(cli: &mut Cli) -> CliResult<Self> {
         // set short help text in case of an error
-        cli.check_help(
-            Help::new()
-                .quick_text(HELP)
-                .flag(Flag::new("help").switch('h'))
-                .ref_usage(USAGE_LINE..USAGE_LINE + 2),
-        )?;
-
-        let radd = Sum {
+        cli.check_help(Help::default().text(HELP))?;
+        Ok(Sum {
             verbose: cli.check_flag(Flag::new("verbose"))?,
             nums: cli.require_positional_all(Positional::new("num"))?,
-        };
-        // verify the cli has no additional arguments if this is the top-level command being parsed
-        cli.is_empty()?;
-        Ok(radd)
+        })
     }
-}
 
-impl Command<()> for Sum {
-    type Status = u8;
-
-    fn exec(&self, _: &()) -> Self::Status {
+    fn execute(self, _: &()) -> CommandResult {
         let sum: Digit = self.run();
         if self.verbose == true {
             println!("{:?} = {}", self.nums, sum);
         } else {
             println!("{}", sum);
         }
-        0
+        Ok(())
     }
 }
-
-// 0-indexed from `HELP` string
-const USAGE_LINE: usize = 2;
 
 const HELP: &str = "\
 Computes the summation.
@@ -112,10 +65,10 @@ mod test {
     #[test]
     fn backend_logic() {
         let app = Sum {
-            nums: vec![1, 2, 3],
+            nums: vec![1.0, 2.0, 3.0],
             verbose: false,
         };
 
-        assert_eq!(app.run(), 6);
+        assert_eq!(app.run(), 6.0);
     }
 }

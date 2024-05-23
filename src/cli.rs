@@ -1,9 +1,10 @@
-use crate::arg::*;
-use crate::command::FromCli;
+use crate::error::{self, CapMode};
 use crate::error::{Error, ErrorContext, ErrorKind};
 use crate::help::Help;
 use crate::seqalin;
 use crate::seqalin::Cost;
+use crate::{arg::*, Climb};
+use colored::Colorize;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -107,8 +108,23 @@ pub struct Cli {
     help: Option<Help>,
     asking_for_help: bool,
     prioritize_help: bool,
+    cap_mode: CapMode,
     threshold: Cost,
-    use_color: bool,
+}
+
+impl Default for Cli {
+    fn default() -> Self {
+        Self {
+            tokens: Vec::new(),
+            opt_store: HashMap::new(),
+            known_args: Vec::new(),
+            help: None,
+            asking_for_help: false,
+            prioritize_help: true,
+            cap_mode: CapMode::default(),
+            threshold: 2,
+        }
+    }
 }
 
 impl Cli {
@@ -120,9 +136,9 @@ impl Cli {
             known_args: Vec::new(),
             help: None,
             asking_for_help: false,
+            cap_mode: CapMode::Manual,
             prioritize_help: true,
             threshold: 0,
-            use_color: true,
         }
     }
 
@@ -215,39 +231,21 @@ impl Cli {
         self
     }
 
-    /// Enables the coloring for error messages.
-    ///
-    /// This is enabled by default. Note this function is not able to override
-    /// the crayon crate's color variable.
-    #[cfg(feature = "color")]
-    pub fn use_color(&mut self) -> () {
-        self.use_color = true;
-    }
-
-    /// Disables the coloring for error messages.
-    ///
-    /// Note this function is only effective if the overall crayon crate's color is enabled.
-    #[cfg(feature = "color")]
-    pub fn disable_color(&mut self) -> () {
-        self.use_color = false;
-    }
-
-    /// Disables the coloring for error messages.
-    ///
-    /// Note this function is only effective if the overall crayon crate's color is enabled.
-    #[cfg(feature = "color")]
-    pub fn no_color(mut self) -> Self {
-        self.disable_color();
+    /// Automatically uppercase error messages.
+    pub fn auto_uppercase_errors(mut self) -> Self {
+        self.cap_mode = CapMode::Upper;
         self
     }
 
-    /// Enables the coloring for error messages.
-    ///
-    /// This is enabled by default. Note this function is not able to override
-    /// the crayon crate's color variable.
-    #[cfg(feature = "color")]
-    pub fn color(mut self) -> Self {
-        self.use_color();
+    /// Automatically lowercase error messages.
+    pub fn auto_lowercase_errors(mut self) -> Self {
+        self.cap_mode = CapMode::Lower;
+        self
+    }
+
+    /// Do not allow any formatting on error messages.
+    pub fn disable_auto_case_errors(mut self) -> Self {
+        self.cap_mode = CapMode::Manual;
         self
     }
 
@@ -309,7 +307,7 @@ impl Cli {
                 self.help.clone(),
                 ErrorKind::Help,
                 ErrorContext::Help,
-                self.use_color,
+                self.cap_mode,
             ))
         } else {
             Ok(())
@@ -337,7 +335,7 @@ impl Cli {
     /// Determines if an `UnattachedArg` exists to be served as a subcommand.
     ///
     /// If so, it will call `from_cli` on the type defined. If not, it will return none.
-    pub fn check_command<'a, T: FromCli>(&mut self, p: Positional) -> Result<Option<T>, Error> {
+    pub fn check_command<'a, T: Climb<U>, U>(&mut self, p: Positional) -> Result<Option<T>, Error> {
         self.known_args.push(Arg::Positional(p));
         // check but do not remove if an unattached arg exists
         let command_exists = self
@@ -388,7 +386,7 @@ impl Cli {
                         self.help.clone(),
                         ErrorKind::OutOfContextArgSuggest,
                         ErrorContext::OutofContextArgSuggest(format!("{}{}", prefix, key), command),
-                        self.use_color,
+                        self.cap_mode,
                     ));
                 }
             }
@@ -405,7 +403,7 @@ impl Cli {
                     self.help.clone(),
                     ErrorKind::SuggestSubcommand,
                     ErrorContext::SuggestWord(command, w.to_string()),
-                    self.use_color,
+                    self.cap_mode,
                 ))
             } else {
                 self.prioritize_help()?;
@@ -416,7 +414,7 @@ impl Cli {
                         self.known_args.pop().expect("requires positional argument"),
                         command,
                     ),
-                    self.use_color,
+                    self.cap_mode,
                 ))
             }
         }
@@ -455,7 +453,7 @@ impl Cli {
                             word,
                             Box::new(err),
                         ),
-                        self.use_color,
+                        self.cap_mode,
                     ))
                 }
             },
@@ -479,7 +477,7 @@ impl Cli {
                 self.help.clone(),
                 ErrorKind::MissingPositional,
                 ErrorContext::FailedArg(self.known_args.pop().unwrap()),
-                self.use_color,
+                self.cap_mode,
             ))
         }
     }
@@ -528,7 +526,7 @@ impl Cli {
                                 format!("{}{}", symbol::FLAG, f.0),
                                 format!("{}{}", symbol::FLAG, word),
                             ),
-                            self.use_color,
+                            self.cap_mode,
                         ))
                     } else {
                         None
@@ -576,7 +574,7 @@ impl Cli {
                                     word,
                                     Box::new(err),
                                 ),
-                                self.use_color,
+                                self.cap_mode,
                             ))
                         }
                     }
@@ -586,7 +584,7 @@ impl Cli {
                         self.help.clone(),
                         ErrorKind::ExpectingValue,
                         ErrorContext::FailedArg(self.known_args.pop().unwrap()),
-                        self.use_color,
+                        self.cap_mode,
                     ))
                 }
             }
@@ -597,7 +595,7 @@ impl Cli {
                     self.help.clone(),
                     ErrorKind::DuplicateOptions,
                     ErrorContext::FailedArg(self.known_args.pop().unwrap()),
-                    self.use_color,
+                    self.cap_mode,
                 ))
             }
         }
@@ -623,7 +621,7 @@ impl Cli {
                     self.help.clone(),
                     ErrorKind::ExceedingMaxCount,
                     ErrorContext::ExceededThreshold(self.known_args.pop().unwrap(), r.len(), n),
-                    self.use_color,
+                    self.cap_mode,
                 )),
             },
             None => Ok(None),
@@ -665,7 +663,7 @@ impl Cli {
                                 word,
                                 Box::new(err),
                             ),
-                            self.use_color,
+                            self.cap_mode,
                         ));
                     }
                 }
@@ -675,7 +673,7 @@ impl Cli {
                     self.help.clone(),
                     ErrorKind::ExpectingValue,
                     ErrorContext::FailedArg(self.known_args.pop().unwrap()),
-                    self.use_color,
+                    self.cap_mode,
                 ));
             }
         }
@@ -694,7 +692,7 @@ impl Cli {
                     self.help.clone(),
                     ErrorKind::DuplicateOptions,
                     ErrorContext::FailedArg(self.known_args.pop().unwrap()),
-                    self.use_color,
+                    self.cap_mode,
                 ))
             }
             // the flag was either raised once or not at all
@@ -721,7 +719,7 @@ impl Cli {
                 self.help.clone(),
                 ErrorKind::UnexpectedValue,
                 ErrorContext::UnexpectedValue(self.known_args.pop().unwrap(), val.take().unwrap()),
-                self.use_color,
+                self.cap_mode,
             ));
         } else {
             let raised = occurences.len() != 0;
@@ -757,7 +755,7 @@ impl Cli {
                 self.help.clone(),
                 ErrorKind::ExceedingMaxCount,
                 ErrorContext::ExceededThreshold(self.known_args.pop().unwrap(), occurences, n),
-                self.use_color,
+                self.cap_mode,
             )),
         }
     }
@@ -824,7 +822,7 @@ impl Cli {
                                     format!("{}{}", symbol::FLAG, key),
                                     format!("{}{}", symbol::FLAG, closest),
                                 ),
-                                self.use_color,
+                                self.cap_mode,
                             ));
                         }
                         symbol::FLAG
@@ -851,7 +849,7 @@ impl Cli {
                 self.help.clone(),
                 ErrorKind::UnexpectedArg,
                 ErrorContext::UnexpectedArg(format!("{}{}", prefix, key)),
-                self.use_color,
+                self.cap_mode,
             ))
         // find first non-none token
         } else if let Some(t) = self.tokens.iter().find(|p| p.is_some()) {
@@ -860,13 +858,13 @@ impl Cli {
                     self.help.clone(),
                     ErrorKind::UnexpectedArg,
                     ErrorContext::UnexpectedArg(word.to_string()),
-                    self.use_color,
+                    self.cap_mode,
                 )),
                 Some(Token::Terminator(_)) => Err(Error::new(
                     self.help.clone(),
                     ErrorKind::UnexpectedArg,
                     ErrorContext::UnexpectedArg(symbol::FLAG.to_string()),
-                    self.use_color,
+                    self.cap_mode,
                 )),
                 _ => panic!("no other tokens types should be left"),
             }
@@ -933,7 +931,7 @@ impl Cli {
                             Arg::Flag(Flag::new("")),
                             tkn.take().unwrap().take_str(),
                         ),
-                        self.use_color,
+                        self.cap_mode,
                     ))),
                     _ => panic!("no other tokens should exist beyond terminator {:?}", tkn),
                 }
@@ -964,6 +962,59 @@ impl Cli {
             slot.get_indices().to_vec()
         } else {
             Vec::new()
+        }
+    }
+}
+
+impl Cli {
+    /// Glues the interface layer and backend logic for a smooth hand-off of data.
+    pub fn go<U, T: Climb<U>>(mut self, context: U) -> u8 {
+        match T::from_cli(&mut self) {
+            // construct the application
+            Ok(app) => {
+                // verify the cli has no additional arguments if this is the top-level command being parsed
+                match self.is_empty() {
+                    Ok(_) => {
+                        let cap_mode = self.cap_mode;
+                        std::mem::drop(self);
+                        match app.execute(&context) {
+                            Ok(_) => 0,
+                            Err(err) => {
+                                eprintln!(
+                                    "{}: {}",
+                                    "error".red().bold(),
+                                    error::format_err_msg(err.to_string(), cap_mode)
+                                );
+                                101
+                            }
+                        }
+                    }
+                    // report cli error
+                    Err(err) => {
+                        match err.kind() {
+                            ErrorKind::Help => println!("{}", &err),
+                            _ => eprintln!(
+                                "{}: {}",
+                                "error".red().bold(),
+                                error::format_err_msg(err.to_string(), self.cap_mode)
+                            ),
+                        }
+                        err.code()
+                    }
+                }
+            }
+            // report cli error
+            Err(err) => {
+                match err.kind() {
+                    ErrorKind::Help => println!("{}", &err),
+                    _ => eprintln!(
+                        "{}: {}",
+                        "error".red().bold(),
+                        error::format_err_msg(err.to_string(), self.cap_mode)
+                    ),
+                }
+                err.code()
+            }
         }
     }
 }

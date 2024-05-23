@@ -55,7 +55,7 @@ Arguments are learned as-they-go: the cli parsing framework learns each argument
 
 - arguments can be reused in both structs for overall command and nested subcommand
 
-- zero dependencies (use the `color` feature for coloring)
+- minimal dependencies (only relies on `colored` crate)
 
 - uses dynamic programming sequence alignment algorithm to detect misspelled arguments (with configurable `threshold` for string comparison)
 
