@@ -10,7 +10,7 @@ default = []
 color = ["dep:crayon"]
 
 [dependencies]
-crayon = { git = "https://github.com/cdotrus/crayon", tag = "0.1.1", optional = true }
+crayon = { git = "https://github.com/cdotrus/crayon", tag = "0.1.1", version = "0.1.1", optional = true }
 
 [dev-dependencies]
-crayon = { git = "https://github.com/cdotrus/crayon", tag = "0.1.1" }
+crayon = { git = "https://github.com/cdotrus/crayon", tag = "0.1.1", version = "0.1.1" }

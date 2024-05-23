@@ -1,6 +1,19 @@
 # `clif`
 
-### A lightweight and effective Command-Line Interface Framework.
+[![Pipeline](https://github.com/cdotrus/clif/actions/workflows/pipeline.yml/badge.svg?branch=trunk)](https://github.com/cdotrus/clif/actions/workflows/pipeline.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A lightweight and effective command-line interface framework.
+
+### Install
+
+Run the following Cargo command in your project directory:
+``` bash
+cargo add --git "https://github.com/cdotrus/clif.git" --tag "0.1.5"
+```
+Or add the following line to your Cargo.toml:
+``` toml
+clif = { git = "https://github.com/cdotrus/clif.git", tag = "0.1.5", version = "0.1.5" }
+```
 
 ## Overview
 

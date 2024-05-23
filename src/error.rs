@@ -82,7 +82,12 @@ impl Error {
     pub fn validate<U, E: std::error::Error + 'static>(rule: Result<U, E>) -> Result<U, Self> {
         match rule {
             Ok(t) => Ok(t),
-            Err(e) => Err(Self::new(None, ErrorKind::CustomRule, ErrorContext::CustomRule(Box::new(e)), false))
+            Err(e) => Err(Self::new(
+                None,
+                ErrorKind::CustomRule,
+                ErrorContext::CustomRule(Box::new(e)),
+                false,
+            )),
         }
     }
 }

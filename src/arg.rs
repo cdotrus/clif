@@ -47,7 +47,9 @@ pub struct Positional {
 
 impl Positional {
     pub fn new<T: AsRef<str>>(s: T) -> Self {
-        Self { name: s.as_ref().to_string() }
+        Self {
+            name: s.as_ref().to_string(),
+        }
     }
 }
 
@@ -70,7 +72,7 @@ pub struct Flag {
 }
 
 impl Flag {
-    pub fn new<T: AsRef<str>> (s: T) -> Self {
+    pub fn new<T: AsRef<str>>(s: T) -> Self {
         Self {
             name: s.as_ref().to_string(),
             switch: None,
@@ -143,10 +145,20 @@ mod test {
     #[test]
     fn positional_new() {
         let ip = Positional::new("ip");
-        assert_eq!(ip, Positional { name: String::from("ip") });
+        assert_eq!(
+            ip,
+            Positional {
+                name: String::from("ip")
+            }
+        );
 
         let version = Positional::new("version");
-        assert_eq!(version, Positional { name: String::from("version") });
+        assert_eq!(
+            version,
+            Positional {
+                name: String::from("version")
+            }
+        );
     }
 
     #[test]

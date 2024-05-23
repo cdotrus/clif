@@ -7,7 +7,7 @@ mod tag {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Help<> {
+pub struct Help {
     arg: Flag,
     summary: Option<String>,
     usage: Option<String>,
@@ -91,7 +91,8 @@ impl Help {
             self.usage = Some(
                 self.quick_text
                     .get(start_char.unwrap()..end_char.unwrap())
-                    .unwrap().to_owned(),
+                    .unwrap()
+                    .to_owned(),
             );
         }
 

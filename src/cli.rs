@@ -337,10 +337,7 @@ impl Cli {
     /// Determines if an `UnattachedArg` exists to be served as a subcommand.
     ///
     /// If so, it will call `from_cli` on the type defined. If not, it will return none.
-    pub fn check_command<'a, T: FromCli>(
-        &mut self,
-        p: Positional,
-    ) -> Result<Option<T>, Error> {
+    pub fn check_command<'a, T: FromCli>(&mut self, p: Positional) -> Result<Option<T>, Error> {
         self.known_args.push(Arg::Positional(p));
         // check but do not remove if an unattached arg exists
         let command_exists = self
@@ -429,10 +426,7 @@ impl Cli {
     ///
     /// Errors if parsing fails. If the next argument is not a positional, it will
     /// not move forward in the token stream.
-    pub fn check_positional<'a, T: FromStr>(
-        &mut self,
-        p: Positional,
-    ) -> Result<Option<T>, Error>
+    pub fn check_positional<'a, T: FromStr>(&mut self, p: Positional) -> Result<Option<T>, Error>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
@@ -495,10 +489,7 @@ impl Cli {
     /// Errors if parsing fails or if zero unattached arguments are left in the token stream to begin.
     ///
     /// The resulting vector is guaranteed to have `.len() >= 1`.
-    pub fn require_positional_all<'a, T: FromStr>(
-        &mut self,
-        p: Positional,
-    ) -> Result<Vec<T>, Error>
+    pub fn require_positional_all<'a, T: FromStr>(&mut self, p: Positional) -> Result<Vec<T>, Error>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
@@ -642,10 +633,7 @@ impl Cli {
     /// Queries for all values behind an `Optional`.
     ///
     /// Errors if a parsing fails from string.
-    pub fn check_option_all<'a, T: FromStr>(
-        &mut self,
-        o: Optional,
-    ) -> Result<Option<Vec<T>>, Error>
+    pub fn check_option_all<'a, T: FromStr>(&mut self, o: Optional) -> Result<Option<Vec<T>>, Error>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
