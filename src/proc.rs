@@ -1,43 +1,54 @@
 use crate::cli;
 use crate::cli::Cli;
 
+/// The return type for a [Command]'s execution process.
 pub type Result = std::result::Result<(), Box<dyn std::error::Error>>;
 
 pub trait Command: Sized {
-    /// Collects tokens from the command-line interface to define a struct's fields.
+    /// Constructs the given struct by mapping the parsed representation
+    /// of command-line inputs (tokens) into the appropriate data fields.
     ///
-    /// The recommended argument discovery order is
-    /// 1. `flags`
-    /// 2. `optionals`
-    /// 3. `positionals`
-    /// 4. `subcommands`
+    /// The _argument discovery order_ must be preserved and upheld by the programmer:
+    /// 1. `Flags`
+    /// 2. `Optionals`
+    /// 3. `Positionals`
+    /// 4. `Subcommands`
     ///
-    /// It is considered a programmer's error if the arguments are not processed
-    /// in the specified order by their type.
-    fn parse(cli: &mut Cli) -> cli::Result<Self>;
+    /// Failure to map the appropriate data fields in the correct order according to
+    /// the method in how they recieve their data from the command-line is considered
+    /// a programmer's error and will result in a panic!.
+    fn construct(cli: &mut Cli) -> cli::Result<Self>;
 
-    /// Run the backend logic for this command.
+    /// Processes the initialized struct and its defined data for an arbitrary
+    /// task.
     ///
-    /// This function owns the self structure.
+    /// A [Command] is considered a top-level process, and as such, cannot have
+    /// a predefined context. For providing predefined contexts to commands, see
+    /// the [Subcommand] trait.
     fn execute(self) -> Result;
 }
 
 pub trait Subcommand<T>: Sized {
-    /// Collects tokens from the command-line interface to define a struct's fields.
+    /// Constructs the given struct by mapping the parsed representation
+    /// of command-line inputs (tokens) into the appropriate data fields.
     ///
-    /// The recommended argument discovery order is
-    /// 1. `flags`
-    /// 2. `optionals`
-    /// 3. `positionals`
-    /// 4. `subcommands`
+    /// The _argument discovery order_ must be preserved and upheld by the programmer:
+    /// 1. `Flags`
+    /// 2. `Optionals`
+    /// 3. `Positionals`
+    /// 4. `Subcommands`
     ///
-    /// It is considered a programmer's error if the arguments are not processed
-    /// in the specified order by their type.
-    fn parse(cli: &mut Cli) -> cli::Result<Self>;
+    /// Failure to map the appropriate data fields in the correct order according to
+    /// the method in how they recieve their data from the command-line is considered
+    /// a programmer's error and will result in a panic!.
+    fn construct(cli: &mut Cli) -> cli::Result<Self>;
 
-    /// Run the backend logic for this command.
+    /// Processes the initialized struct and its defined data for an arbitrary
+    /// task.
     ///
-    /// This function owns the self structure.
+    /// A [Subcommand] is considered a intermediate-level process, and as such,
+    /// it requires a predefined context. For omitting a predefined context to
+    /// a command, see the [Command] trait.
     fn execute(self, context: &T) -> Result;
 }
 
@@ -61,7 +72,7 @@ mod test {
     }
 
     impl Subcommand<()> for Add {
-        fn parse(cli: &mut Cli) -> cli::Result<Self> {
+        fn construct(cli: &mut Cli) -> cli::Result<Self> {
             cli.check_help(Help::new().text("Usage: add <lhs> <rhs> [--verbose]"))?;
             // the ability to "learn options" beforehand is possible, or can be skipped
             // "learn options" here (take in known args (as ref?))
@@ -99,7 +110,7 @@ mod test {
     }
 
     impl Command for Op {
-        fn parse(cli: &mut Cli) -> cli::Result<Self> {
+        fn construct(cli: &mut Cli) -> cli::Result<Self> {
             let m = Ok(Op {
                 force: cli.check_flag(Flag::new("force"))?,
                 version: cli.check_flag(Flag::new("version"))?,
@@ -124,9 +135,9 @@ mod test {
     }
 
     impl Subcommand<()> for OpSubcommand {
-        fn parse(cli: &mut Cli) -> cli::Result<Self> {
+        fn construct(cli: &mut Cli) -> cli::Result<Self> {
             match cli.match_command(&["add", "mult", "sub"])?.as_ref() {
-                "add" => Ok(OpSubcommand::Add(Add::parse(cli)?)),
+                "add" => Ok(OpSubcommand::Add(Add::construct(cli)?)),
                 _ => panic!("an unimplemented command was passed through!"),
             }
         }
@@ -140,8 +151,8 @@ mod test {
 
     #[test]
     fn make_add_command() {
-        let mut cli = Cli::new().tokenize(args(vec!["add", "9", "10"]));
-        let add = Add::parse(&mut cli).unwrap();
+        let mut cli = Cli::new().parse(args(vec!["add", "9", "10"]));
+        let add = Add::construct(&mut cli).unwrap();
         assert_eq!(
             add,
             Add {
@@ -152,8 +163,8 @@ mod test {
             }
         );
 
-        let mut cli = Cli::new().tokenize(args(vec!["add", "1", "4", "--verbose"]));
-        let add = Add::parse(&mut cli).unwrap();
+        let mut cli = Cli::new().parse(args(vec!["add", "1", "4", "--verbose"]));
+        let add = Add::construct(&mut cli).unwrap();
         assert_eq!(
             add,
             Add {
@@ -164,8 +175,8 @@ mod test {
             }
         );
 
-        let mut cli = Cli::new().tokenize(args(vec!["add", "5", "--verbose", "2"]));
-        let add = Add::parse(&mut cli).unwrap();
+        let mut cli = Cli::new().parse(args(vec!["add", "5", "--verbose", "2"]));
+        let add = Add::construct(&mut cli).unwrap();
         assert_eq!(
             add,
             Add {
@@ -179,8 +190,8 @@ mod test {
 
     #[test]
     fn nested_commands() {
-        let mut cli = Cli::new().tokenize(args(vec!["op", "add", "9", "10"]));
-        let op = Op::parse(&mut cli).unwrap();
+        let mut cli = Cli::new().parse(args(vec!["op", "add", "9", "10"]));
+        let op = Op::construct(&mut cli).unwrap();
         assert_eq!(
             op,
             Op {
@@ -195,8 +206,8 @@ mod test {
             }
         );
 
-        let mut cli = Cli::new().tokenize(args(vec!["op"]));
-        let op = Op::parse(&mut cli).unwrap();
+        let mut cli = Cli::new().parse(args(vec!["op"]));
+        let op = Op::construct(&mut cli).unwrap();
         assert_eq!(
             op,
             Op {
@@ -206,8 +217,8 @@ mod test {
             }
         );
 
-        let mut cli = Cli::new().tokenize(args(vec!["op", "--version", "add", "9", "10"]));
-        let op = Op::parse(&mut cli).unwrap();
+        let mut cli = Cli::new().parse(args(vec!["op", "--version", "add", "9", "10"]));
+        let op = Op::construct(&mut cli).unwrap();
         assert_eq!(
             op,
             Op {
@@ -223,23 +234,22 @@ mod test {
         );
 
         // out-of-context arg '--verbose' move it after 'add'
-        let mut cli = Cli::new().tokenize(args(vec!["op", "--verbose", "add", "9", "10"]));
-        let op = Op::parse(&mut cli);
+        let mut cli = Cli::new().parse(args(vec!["op", "--verbose", "add", "9", "10"]));
+        let op = Op::construct(&mut cli);
         assert!(op.is_err());
     }
 
     #[test]
     #[should_panic]
     fn unimplemented_nested_command() {
-        let mut cli = Cli::new().tokenize(args(vec!["op", "mult", "9", "10"]));
-        let _ = Op::parse(&mut cli);
+        let mut cli = Cli::new().parse(args(vec!["op", "mult", "9", "10"]));
+        let _ = Op::construct(&mut cli);
     }
 
     #[test]
     fn reuse_collected_arg() {
-        let mut cli =
-            Cli::new().tokenize(args(vec!["op", "--version", "add", "9", "10", "--force"]));
-        let op = Op::parse(&mut cli).unwrap();
+        let mut cli = Cli::new().parse(args(vec!["op", "--version", "add", "9", "10", "--force"]));
+        let op = Op::construct(&mut cli).unwrap();
         assert_eq!(
             op,
             Op {

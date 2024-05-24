@@ -2,20 +2,16 @@ use cliproc::{cli, proc};
 use cliproc::{Cli, Command, ExitCode, Help, Optional};
 use std::env;
 
-// Fetch the command-line arguments to pass to the cli processor
-fn main() -> ExitCode {
-    Cli::default().tokenize(env::args()).go::<Demo>()
-}
-
+// 1. Define the struct and the data required to perform its task
 struct Demo {
     name: String,
     count: Option<u8>,
 }
 
-// Derive the `Command` trait to allow a struct to be built from the command-line
+// 2. Implement the `Command` trait to allow a struct to function as a command
 impl Command for Demo {
-    // Translate the cli data into the backend data
-    fn parse(cli: &mut Cli) -> cli::Result<Self> {
+    // 2a. Map the command-line data to the struct's data
+    fn construct(cli: &mut Cli) -> cli::Result<Self> {
         cli.check_help(Help::default().text(HELP))?;
         Ok(Demo {
             name: cli.require_option(Optional::new("name").switch('n'))?,
@@ -23,13 +19,18 @@ impl Command for Demo {
         })
     }
 
-    // Run the backend process/logic
+    // 2b. Process the struct's data to perform its task
     fn execute(self) -> proc::Result {
         for _ in 0..self.count.unwrap_or(1) {
             println!("Hello {}!", self.name);
         }
         Ok(())
     }
+}
+
+// 3. Parse the command-line arguments and run the command
+fn main() -> ExitCode {
+    Cli::default().parse(env::args()).go::<Demo>()
 }
 
 const HELP: &str = "\

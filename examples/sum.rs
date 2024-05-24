@@ -5,7 +5,7 @@ use cliproc::{Cli, Command, ExitCode};
 use cliproc::{Flag, Help, Positional};
 
 fn main() -> ExitCode {
-    Cli::default().tokenize(env::args()).go::<Sum>()
+    Cli::default().parse(env::args()).go::<Sum>()
 }
 
 type Digit = f32;
@@ -25,7 +25,7 @@ impl Sum {
 }
 
 impl Command for Sum {
-    fn parse(cli: &mut Cli) -> cli::Result<Self> {
+    fn construct(cli: &mut Cli) -> cli::Result<Self> {
         // set short help text in case of an error
         cli.check_help(Help::default().text(HELP))?;
         Ok(Sum {

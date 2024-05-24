@@ -10,7 +10,7 @@ use cliproc::{Flag, Help, Positional};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    Cli::default().tokenize(env::args()).go::<Add>()
+    Cli::default().parse(env::args()).go::<Add>()
 }
 
 #[derive(PartialEq, Debug)]
@@ -40,7 +40,7 @@ impl Display for AddError {
 impl Error for AddError {}
 
 impl Command for Add {
-    fn parse(cli: &mut Cli) -> cli::Result<Self> {
+    fn construct(cli: &mut Cli) -> cli::Result<Self> {
         cli.check_help(Help::default().text(HELP))?;
         Ok(Add {
             verbose: cli.check_flag(Flag::new("verbose"))?,

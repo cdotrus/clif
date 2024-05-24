@@ -9,8 +9,10 @@ use std::collections::HashSet;
 use std::process::ExitCode;
 use std::str::FromStr;
 
-pub type Result<T> = std::result::Result<T, Error>;
 pub use crate::error::{Error, ErrorContext, ErrorKind};
+
+/// The return type for a [Command]'s construction process.
+pub type Result<T> = std::result::Result<T, Error>;
 
 mod symbol {
     // series of characters to denote flags and switches
@@ -177,7 +179,7 @@ impl Cli {
 
     /// Builds the `Cli` struct by perfoming lexical analysis on the vector of
     /// `String`.
-    pub fn tokenize<T: Iterator<Item = String>>(mut self, args: T) -> Self {
+    pub fn parse<T: Iterator<Item = String>>(mut self, args: T) -> Self {
         let mut tokens = Vec::<Option<Token>>::with_capacity(5);
         let mut store = HashMap::with_capacity(5);
         let mut terminated = false;
@@ -382,7 +384,7 @@ impl Cli {
         if command_exists == true {
             // reset the parser state upon entering new subcommand
             self.state = ParserState::reset();
-            let sub = Some(T::parse(self)?);
+            let sub = Some(T::construct(self)?);
             self.state.proceed(ParserState::ProcessingSubcommands);
             Ok(sub)
         } else {
@@ -1036,7 +1038,7 @@ impl Cli {
 impl Cli {
     /// Glues the interface layer and backend logic for a smooth hand-off of data.
     pub fn go<T: Command>(mut self) -> ExitCode {
-        match T::parse(&mut self) {
+        match T::construct(&mut self) {
             // construct the application
             Ok(program) => {
                 // verify the cli has no additional arguments if this is the top-level command being parsed
@@ -1099,7 +1101,7 @@ mod test {
     #[test]
     fn get_all_optionals() {
         // option provided multiple times
-        let mut cli = Cli::new().tokenize(args(vec![
+        let mut cli = Cli::new().parse(args(vec![
             "orbit",
             "plan",
             "--fileset",
@@ -1114,7 +1116,7 @@ mod test {
             .unwrap();
         assert_eq!(sets, vec!["a", "b", "c"]);
         // failing case- bad conversion of 'c' to an integer
-        let mut cli = Cli::new().tokenize(args(vec![
+        let mut cli = Cli::new().parse(args(vec![
             "orbit",
             "plan",
             "--digit",
@@ -1128,7 +1130,7 @@ mod test {
             true
         ); // bad conversion
            // option provided as valid integers
-        let mut cli = Cli::new().tokenize(args(vec![
+        let mut cli = Cli::new().parse(args(vec![
             "orbit",
             "plan",
             "--digit",
@@ -1143,21 +1145,21 @@ mod test {
             .unwrap();
         assert_eq!(sets, vec![10, 9, 1]);
         // option provided once
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "plan", "--fileset", "a"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "plan", "--fileset", "a"]));
         let sets: Vec<String> = cli
             .check_option_all(Optional::new("fileset"))
             .unwrap()
             .unwrap();
         assert_eq!(sets, vec!["a"]);
         // option not provided
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "plan"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "plan"]));
         let sets: Option<Vec<String>> = cli.check_option_all(Optional::new("fileset")).unwrap();
         assert_eq!(sets, None);
     }
 
     #[test]
     fn match_command() {
-        let mut cli = Cli::new().tokenize(args(vec![
+        let mut cli = Cli::new().parse(args(vec![
             "orbit",
             "get",
             "rary.gates",
@@ -1171,7 +1173,7 @@ mod test {
             "get".to_string()
         );
 
-        let mut cli = Cli::new().threshold(4).tokenize(args(vec![
+        let mut cli = Cli::new().threshold(4).parse(args(vec![
             "orbit",
             "got",
             "rary.gates",
@@ -1187,7 +1189,7 @@ mod test {
     #[test]
     #[should_panic = "requires positional argument"]
     fn match_command_no_arg() {
-        let mut cli = Cli::new().tokenize(args(vec![
+        let mut cli = Cli::new().parse(args(vec![
             "orbit",
             "got",
             "rary.gates",
@@ -1202,7 +1204,7 @@ mod test {
 
     #[test]
     fn find_first_flag_left() {
-        let cli = Cli::new().tokenize(args(vec![
+        let cli = Cli::new().parse(args(vec![
             "orbit",
             "--help",
             "new",
@@ -1215,10 +1217,10 @@ mod test {
             Some(("help", 0))
         );
 
-        let cli = Cli::new().tokenize(args(vec!["orbit", "new", "rary.gates"]));
+        let cli = Cli::new().parse(args(vec!["orbit", "new", "rary.gates"]));
         assert_eq!(cli.find_first_flag_left(cli.tokens.len()), None);
 
-        let cli = Cli::new().tokenize(args(vec![
+        let cli = Cli::new().parse(args(vec![
             "orbit",
             "new",
             "rary.gates",
@@ -1228,13 +1230,13 @@ mod test {
         ]));
         assert_eq!(cli.find_first_flag_left(cli.tokens.len()), Some(("vcs", 2)));
 
-        let cli = Cli::new().tokenize(args(vec!["orbit", "new", "rary.gates", "-c=git", "--help"]));
+        let cli = Cli::new().parse(args(vec!["orbit", "new", "rary.gates", "-c=git", "--help"]));
         assert_eq!(cli.find_first_flag_left(cli.tokens.len()), Some(("c", 2)));
 
-        let cli = Cli::new().tokenize(args(vec!["orbit", "new", "rary.gates", "-c=git", "--help"]));
+        let cli = Cli::new().parse(args(vec!["orbit", "new", "rary.gates", "-c=git", "--help"]));
         assert_eq!(cli.find_first_flag_left(1), None); // check before 'rary.gates' position
 
-        let cli = Cli::new().tokenize(args(vec![
+        let cli = Cli::new().parse(args(vec![
             "orbit",
             "--unknown",
             "new",
@@ -1247,7 +1249,7 @@ mod test {
 
     #[test]
     fn processed_all_args() {
-        let mut cli = Cli::new().tokenize(args(vec![
+        let mut cli = Cli::new().parse(args(vec![
             "orbit",
             "--upgrade",
             "new",
@@ -1263,7 +1265,7 @@ mod test {
         // no more tokens left in stream
         assert_eq!(cli.is_empty().unwrap(), ());
 
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "new", "rary.gates", symbol::FLAG]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "new", "rary.gates", symbol::FLAG]));
         // removes only valid args/flags/opts
         let _ = cli.check_flag(Flag::new("help")).unwrap();
         let _: Option<String> = cli.check_option(Optional::new("vcs")).unwrap();
@@ -1272,7 +1274,7 @@ mod test {
         // unexpected '--'
         assert!(cli.is_empty().is_err());
 
-        let mut cli = Cli::new().tokenize(args(vec![
+        let mut cli = Cli::new().parse(args(vec![
             "orbit",
             "--help",
             "new",
@@ -1283,8 +1285,7 @@ mod test {
         // no tokens were removed (help will also raise error)
         assert!(cli.is_empty().is_err());
 
-        let mut cli =
-            Cli::new().tokenize(args(vec!["orbit", symbol::FLAG, "some", "extra", "words"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", symbol::FLAG, "some", "extra", "words"]));
         let _: Vec<String> = cli.check_remainder().unwrap();
         // terminator removed as well as its arguments that were ignored
         assert_eq!(cli.is_empty().unwrap(), ());
@@ -1292,22 +1293,22 @@ mod test {
 
     #[test]
     fn tokenizer() {
-        let cli = Cli::new().tokenize(args(vec![]));
+        let cli = Cli::new().parse(args(vec![]));
         assert_eq!(cli.tokens, vec![]);
 
-        let cli = Cli::new().tokenize(args(vec!["orbit"]));
+        let cli = Cli::new().parse(args(vec!["orbit"]));
         assert_eq!(cli.tokens, vec![]);
 
-        let cli = Cli::new().tokenize(args(vec!["orbit", "--help"]));
+        let cli = Cli::new().parse(args(vec!["orbit", "--help"]));
         assert_eq!(cli.tokens, vec![Some(Token::Flag(0))]);
 
-        let cli = Cli::new().tokenize(args(vec!["orbit", "--help", "-v"]));
+        let cli = Cli::new().parse(args(vec!["orbit", "--help", "-v"]));
         assert_eq!(
             cli.tokens,
             vec![Some(Token::Flag(0)), Some(Token::Switch(1, 'v'))],
         );
 
-        let cli = Cli::new().tokenize(args(vec!["orbit", "new", "rary.gates"]));
+        let cli = Cli::new().parse(args(vec!["orbit", "new", "rary.gates"]));
         assert_eq!(
             cli.tokens,
             vec![
@@ -1316,7 +1317,7 @@ mod test {
             ],
         );
 
-        let cli = Cli::new().tokenize(args(vec!["orbit", "--help", "-vh"]));
+        let cli = Cli::new().parse(args(vec!["orbit", "--help", "-vh"]));
         assert_eq!(
             cli.tokens,
             vec![
@@ -1326,7 +1327,7 @@ mod test {
             ],
         );
 
-        let cli = Cli::new().tokenize(args(vec!["orbit", "--help", "-vhc=10"]));
+        let cli = Cli::new().parse(args(vec!["orbit", "--help", "-vhc=10"]));
         assert_eq!(
             cli.tokens,
             vec![
@@ -1339,7 +1340,7 @@ mod test {
         );
 
         // an attached argument can sneak in behind a terminator
-        let cli = Cli::new().tokenize(args(vec!["orbit", "--=value", "extra"]));
+        let cli = Cli::new().parse(args(vec!["orbit", "--=value", "extra"]));
         assert_eq!(
             cli.tokens,
             vec![
@@ -1350,7 +1351,7 @@ mod test {
         );
 
         // final boss
-        let cli = Cli::new().tokenize(args(vec![
+        let cli = Cli::new().parse(args(vec![
             "orbit",
             "--help",
             "-v",
@@ -1389,7 +1390,7 @@ mod test {
 
     #[test]
     fn find_flags_and_switches() {
-        let mut cli = Cli::new().tokenize(args(vec![
+        let mut cli = Cli::new().parse(args(vec![
             "orbit",
             "--help",
             "-v",
@@ -1429,7 +1430,7 @@ mod test {
 
     #[test]
     fn flags_in_map() {
-        let cli = Cli::new().tokenize(args(vec![
+        let cli = Cli::new().parse(args(vec![
             "orbit",
             "--help",
             "-v",
@@ -1501,7 +1502,7 @@ mod test {
 
     #[test]
     fn take_unattached_args() {
-        let mut cli = Cli::new().tokenize(args(vec![
+        let mut cli = Cli::new().parse(args(vec![
             "orbit",
             "--help",
             "-v",
@@ -1526,7 +1527,7 @@ mod test {
 
     #[test]
     fn take_remainder_args() {
-        let mut cli = Cli::new().tokenize(args(vec![
+        let mut cli = Cli::new().parse(args(vec![
             "orbit",
             "--help",
             "-v",
@@ -1550,22 +1551,22 @@ mod test {
         assert_eq!(cli.check_remainder().unwrap(), Vec::<String>::new());
 
         // an attached argument can sneak in behind a terminator (handle in a result fn)
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "--=value", "extra"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "--=value", "extra"]));
         assert!(cli.check_remainder().is_err());
 
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "--help"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "--help"]));
         // the terminator was never found
         assert_eq!(cli.check_remainder().unwrap(), Vec::<String>::new());
     }
 
     #[test]
     fn pull_values_from_flags() {
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "--help"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "--help"]));
         let locs = cli.take_flag_locs("help");
         assert_eq!(cli.pull_flag(locs, false), vec![None]);
         assert_eq!(cli.tokens.get(0), Some(&None));
 
-        let mut cli = Cli::new().tokenize(args(vec![
+        let mut cli = Cli::new().parse(args(vec![
             "orbit",
             "--name",
             "gates",
@@ -1595,7 +1596,7 @@ mod test {
         assert_eq!(cli.pull_flag(locs, true), vec![Some("1".to_string()), None]);
 
         // gets switches as well from the store
-        let mut cli = Cli::new().tokenize(args(vec![
+        let mut cli = Cli::new().parse(args(vec![
             "orbit",
             "--name",
             "gates",
@@ -1629,12 +1630,12 @@ mod test {
 
     #[test]
     fn check_flag() {
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "--help", "--verbose", "get"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "--help", "--verbose", "get"]));
         assert_eq!(cli.check_flag(Flag::new("help")).unwrap(), true);
         assert_eq!(cli.check_flag(Flag::new("verbose")).unwrap(), true);
         assert_eq!(cli.check_flag(Flag::new("version")).unwrap(), false);
 
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "--upgrade", "-u"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "--upgrade", "-u"]));
         assert_eq!(
             cli.check_flag(Flag::new("upgrade").switch('u'))
                 .unwrap_err()
@@ -1643,7 +1644,7 @@ mod test {
         );
 
         let mut cli =
-            Cli::new().tokenize(args(vec!["orbit", "--verbose", "--verbose", "--version=9"]));
+            Cli::new().parse(args(vec!["orbit", "--verbose", "--verbose", "--version=9"]));
         assert_eq!(
             cli.check_flag(Flag::new("verbose")).unwrap_err().kind(),
             ErrorKind::DuplicateOptions
@@ -1656,7 +1657,7 @@ mod test {
 
     #[test]
     fn check_positional() {
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "new", "rary.gates"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "new", "rary.gates"]));
         assert_eq!(
             cli.check_positional::<String>(Positional::new("command"))
                 .unwrap(),
@@ -1676,10 +1677,10 @@ mod test {
 
     #[test]
     fn check_option() {
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "command", "--rate", "10"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "command", "--rate", "10"]));
         assert_eq!(cli.check_option(Optional::new("rate")).unwrap(), Some(10));
 
-        let mut cli = Cli::new().tokenize(args(vec![
+        let mut cli = Cli::new().parse(args(vec![
             "orbit", "--flag", "--rate=9", "command", "-r", "14",
         ]));
         assert_eq!(
@@ -1689,13 +1690,13 @@ mod test {
             ErrorKind::DuplicateOptions
         );
 
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "--flag", "-r", "14"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "--flag", "-r", "14"]));
         assert_eq!(
             cli.check_option(Optional::new("rate").switch('r')).unwrap(),
             Some(14)
         );
 
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "--flag", "--rate", "--verbose"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "--flag", "--rate", "--verbose"]));
         assert_eq!(
             cli.check_option::<i32>(Optional::new("rate"))
                 .unwrap_err()
@@ -1704,7 +1705,7 @@ mod test {
         );
 
         let mut cli =
-            Cli::new().tokenize(args(vec!["orbit", "--flag", "--rate", "five", "--verbose"]));
+            Cli::new().parse(args(vec!["orbit", "--flag", "--rate", "five", "--verbose"]));
         assert!(cli.check_option::<i32>(Optional::new("rate")).is_err());
     }
 
@@ -1744,7 +1745,7 @@ mod test {
 
     #[test]
     fn try_help_fail() {
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "--h"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "--h"]));
         let locs = cli.take_flag_locs("help");
         assert_eq!(locs.len(), 0);
         assert_eq!(cli.pull_flag(locs, false), vec![]);
@@ -1752,19 +1753,19 @@ mod test {
 
     #[test]
     fn check_option_n() {
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "command", "--rate", "10"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "command", "--rate", "10"]));
         assert_eq!(
             cli.check_option_n(Optional::new("rate"), 1).unwrap(),
             Some(vec![10])
         );
 
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "command", "--rate", "10"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "command", "--rate", "10"]));
         assert_eq!(
             cli.check_option_n(Optional::new("rate"), 2).unwrap(),
             Some(vec![10])
         );
 
-        let mut cli = Cli::new().tokenize(args(vec![
+        let mut cli = Cli::new().parse(args(vec![
             "orbit", "command", "--rate", "10", "--rate", "4", "--rate", "3",
         ]));
         assert_eq!(
@@ -1775,19 +1776,19 @@ mod test {
 
     #[test]
     fn check_flag_n() {
-        let mut cli = Cli::new().tokenize(args(vec!["orbit"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit"]));
         assert_eq!(cli.check_flag_n(Flag::new("debug"), 4).unwrap(), 0);
 
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "--debug"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "--debug"]));
         assert_eq!(cli.check_flag_n(Flag::new("debug"), 1).unwrap(), 1);
 
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "--debug", "--debug"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "--debug", "--debug"]));
         assert_eq!(cli.check_flag_n(Flag::new("debug"), 3).unwrap(), 2);
 
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "--debug", "--debug", "--debug"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "--debug", "--debug", "--debug"]));
         assert_eq!(cli.check_flag_n(Flag::new("debug"), 3).unwrap(), 3);
 
-        let mut cli = Cli::new().tokenize(args(vec![
+        let mut cli = Cli::new().parse(args(vec![
             "orbit", "--debug", "--debug", "--debug", "--debug",
         ]));
         assert_eq!(cli.check_flag_n(Flag::new("debug"), 3).is_err(), true);
@@ -1795,26 +1796,26 @@ mod test {
 
     #[test]
     fn check_flag_all() {
-        let mut cli = Cli::new().tokenize(args(vec!["orbit"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit"]));
         assert_eq!(cli.check_flag_all(Flag::new("debug")).unwrap(), 0);
 
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "--debug", "--debug", "--debug"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "--debug", "--debug", "--debug"]));
         assert_eq!(cli.check_flag_all(Flag::new("debug")).unwrap(), 3);
 
-        let mut cli = Cli::new().tokenize(args(vec!["orbit", "--debug", "--debug", "--debug=1"]));
+        let mut cli = Cli::new().parse(args(vec!["orbit", "--debug", "--debug", "--debug=1"]));
         assert_eq!(cli.check_flag_all(Flag::new("debug")).is_err(), true);
     }
 
     #[test]
     fn requires_positional_all() {
-        let mut cli = Cli::new().tokenize(args(vec!["sum", "10", "20", "30"]));
+        let mut cli = Cli::new().parse(args(vec!["sum", "10", "20", "30"]));
         assert_eq!(
             cli.require_positional_all::<u8>(Positional::new("digit"))
                 .unwrap(),
             vec![10, 20, 30]
         );
 
-        let mut cli = Cli::new().tokenize(args(vec!["sum"]));
+        let mut cli = Cli::new().parse(args(vec!["sum"]));
         assert_eq!(
             cli.require_positional_all::<u8>(Positional::new("digit"))
                 .unwrap_err()
@@ -1822,7 +1823,7 @@ mod test {
             ErrorKind::MissingPositional
         );
 
-        let mut cli = Cli::new().tokenize(args(vec!["sum", "10", "--option", "20", "30"]));
+        let mut cli = Cli::new().parse(args(vec!["sum", "10", "--option", "20", "30"]));
         // note: remember to always check options and flags before positional arguments
         assert_eq!(
             cli.check_option::<u8>(Optional::new("option")).unwrap(),
@@ -1834,7 +1835,7 @@ mod test {
             vec![10, 30]
         );
 
-        let mut cli = Cli::new().tokenize(args(vec!["sum", "100"]));
+        let mut cli = Cli::new().parse(args(vec!["sum", "100"]));
         assert_eq!(
             cli.require_positional_all::<u8>(Positional::new("digit"))
                 .unwrap(),

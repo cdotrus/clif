@@ -43,7 +43,7 @@ mod tests {
             }
 
             impl Command for Add {
-                fn parse(cli: &mut Cli) -> cli::Result<Self> {
+                fn construct(cli: &mut Cli) -> cli::Result<Self> {
                     // set help text in case of an error
                     cli.check_help(Help::default().text(String::new()))?;
                     let radd = Add {
@@ -69,10 +69,8 @@ mod tests {
 
             #[test]
             fn it_add_program() {
-                let mut cli = Cli::new()
-                    .threshold(4)
-                    .tokenize(args(vec!["add", "45", "17"]));
-                let program = Add::parse(&mut cli).unwrap();
+                let mut cli = Cli::new().threshold(4).parse(args(vec!["add", "45", "17"]));
+                let program = Add::construct(&mut cli).unwrap();
                 std::mem::drop(cli);
                 assert_eq!(program.run(), 62);
             }
@@ -95,7 +93,7 @@ mod tests {
             }
 
             impl Command for Add {
-                fn parse(cli: &mut Cli) -> cli::Result<Self> {
+                fn construct(cli: &mut Cli) -> cli::Result<Self> {
                     // set help text in case of an error
                     cli.check_help(Help::default().text(String::new()))?;
                     let radd = Add {
@@ -122,10 +120,8 @@ mod tests {
             #[test]
             #[should_panic]
             fn it_add_program() {
-                let mut cli = Cli::new()
-                    .threshold(4)
-                    .tokenize(args(vec!["add", "45", "17"]));
-                let _ = Add::parse(&mut cli);
+                let mut cli = Cli::new().threshold(4).parse(args(vec!["add", "45", "17"]));
+                let _ = Add::construct(&mut cli);
             }
         }
     }
