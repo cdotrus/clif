@@ -178,8 +178,8 @@ impl Cli {
     /// Builds the `Cli` struct by perfoming lexical analysis on the vector of
     /// `String`.
     pub fn tokenize<T: Iterator<Item = String>>(mut self, args: T) -> Self {
-        let mut tokens = Vec::<Option<Token>>::new();
-        let mut store = HashMap::new();
+        let mut tokens = Vec::<Option<Token>>::with_capacity(5);
+        let mut store = HashMap::with_capacity(5);
         let mut terminated = false;
         let mut args = args.skip(1).enumerate();
         while let Some((i, mut arg)) = args.next() {
@@ -584,6 +584,25 @@ impl Cli {
         }
     }
 
+    /// Queries for an expected value of `Optional`.
+    pub fn require_option<'a, T: FromStr>(&mut self, o: Optional) -> Result<T>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(ParserState::ProcessingOptionals);
+        if let Some(value) = self.check_option(o)? {
+            Ok(value)
+        } else {
+            self.prioritize_help()?;
+            self.is_empty()?;
+            Err(Error::new(
+                self.help.clone(),
+                ErrorKind::MissingOption,
+                ErrorContext::FailedArg(self.known_args.pop().unwrap()),
+                self.cap_mode,
+            ))
+        }
+    }
     /// Queries for a value of `Optional`.
     ///
     /// Errors if there are multiple values or if parsing fails.

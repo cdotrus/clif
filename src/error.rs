@@ -127,6 +127,7 @@ pub enum ErrorContext {
 pub enum ErrorKind {
     BadType,
     MissingPositional,
+    MissingOption,
     DuplicateOptions,
     ExpectingValue,
     UnexpectedValue,
@@ -197,6 +198,14 @@ impl Display for Error {
                     write!(
                         f,
                         "Missing positional argument \"{}\"{}",
+                        arg.to_string().blue(),
+                        self.help_tip().unwrap_or(String::new())
+                    )
+                }
+                ErrorKind::MissingOption => {
+                    write!(
+                        f,
+                        "Missing required option \"{}\"{}",
                         arg.to_string().blue(),
                         self.help_tip().unwrap_or(String::new())
                     )
