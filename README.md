@@ -1,6 +1,6 @@
 # `cliproc`
 
-[![Pipeline](https://github.com/cdotrus/cliproc/actions/workflows/pipeline.yml/badge.svg?branch=trunk)](https://github.com/cdotrus/cliproc/actions/workflows/pipeline.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) ![Crates.io](https://img.shields.io/crates/v/cliproc.svg)
+[![Pipeline](https://github.com/cdotrus/cliproc/actions/workflows/pipeline.yml/badge.svg?branch=trunk)](https://github.com/cdotrus/cliproc/actions/workflows/pipeline.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Crates.io](https://img.shields.io/crates/v/cliproc.svg)](https://crates.io/crates/cliproc)
 
 This library provides support for fast, low-level, and configurable command-line processing.
 
