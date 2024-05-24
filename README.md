@@ -6,7 +6,7 @@ This library provides support for fast, low-level, and configurable command-line
 
 ``` toml
 [dependencies]
-cliproc = "0.1.0"
+cliproc = "1.0.0"
 ```
 
 ## Details
