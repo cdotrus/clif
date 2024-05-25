@@ -108,7 +108,7 @@ impl Slot {
 }
 
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
-enum CliState {
+enum MemoryState {
     Start,
     ProcessingFlags,
     ProcessingOptionals,
@@ -117,9 +117,9 @@ enum CliState {
     End,
 }
 
-impl CliState {
+impl MemoryState {
     /// Ensures the previous state (`self`) can transition to the next state (`next`).
-    pub fn proceed(&mut self, mut next: CliState) {
+    pub fn proceed(&mut self, mut next: MemoryState) {
         // panic if we are already advanced past the next state
         if self > &mut next {
             panic!("{}: argument discovery is in an invalid order: invalid state transition from {:?} to {:?}", "panic!".red().bold().underline(), self, next)
@@ -136,13 +136,13 @@ impl CliState {
 pub mod states {
     pub trait ProcessorState {}
 
-    pub struct Compose;
-    pub struct Block;
+    pub struct Build;
+    pub struct Ready;
     pub struct Memory;
 
-    impl ProcessorState for Compose {}
+    impl ProcessorState for Build {}
 
-    impl ProcessorState for Block {}
+    impl ProcessorState for Ready {}
 
     impl ProcessorState for Memory {}
 }
@@ -202,12 +202,12 @@ pub struct Cli<S: ProcessorState> {
     known_args: Vec<Arg>,
     asking_for_help: bool,
     help: Option<Help>,
-    state: CliState,
+    state: MemoryState,
     options: CliOptions,
     _marker: PhantomData<S>,
 }
 
-impl Default for Cli<Compose> {
+impl Default for Cli<Build> {
     fn default() -> Self {
         Self {
             tokens: Vec::default(),
@@ -215,14 +215,14 @@ impl Default for Cli<Compose> {
             known_args: Vec::default(),
             help: None,
             asking_for_help: false,
-            state: CliState::Start,
+            state: MemoryState::Start,
             options: CliOptions::default(),
             _marker: PhantomData,
         }
     }
 }
 
-impl Cli<Compose> {
+impl Cli<Build> {
     pub fn new() -> Self {
         Self {
             tokens: Vec::new(),
@@ -230,7 +230,7 @@ impl Cli<Compose> {
             known_args: Vec::new(),
             help: None,
             asking_for_help: false,
-            state: CliState::Start,
+            state: MemoryState::Start,
             options: CliOptions::new(),
             _marker: PhantomData,
         }
@@ -288,7 +288,7 @@ impl Cli<Compose> {
     /// representable form for further processing.
     ///
     /// This function transitions the [Cli] state to the [Block] state.
-    pub fn parse<T: Iterator<Item = String>>(mut self, args: T) -> Cli<Block> {
+    pub fn parse<T: Iterator<Item = String>>(mut self, args: T) -> Cli<Ready> {
         let mut tokens = Vec::<Option<Token>>::with_capacity(self.options.capacity);
         let mut store = HashMap::with_capacity(self.options.capacity);
         let mut terminated = false;
@@ -370,7 +370,7 @@ impl Cli<Compose> {
     }
 }
 
-impl Cli<Block> {
+impl Cli<Ready> {
     /// Runs the remaining steps in the command-line processor.
     ///
     /// This function transitions the [Cli] processor to the [Memory] state, and
@@ -447,14 +447,17 @@ impl Cli<Block> {
 // Public API
 impl Cli<Memory> {
     /// Sets the [Help] attribute to display and checks if help has already been raised in the token stream.
-    pub fn check_help(&mut self, help: Help) -> Result<()> {
+    ///
+    /// This function returns whether or not help has been asked for by checking
+    /// for [Help] as a flag on the command-line only if helping is enabled.
+    pub fn check_help(&mut self, help: Help) -> Result<bool> {
         self.help = Some(help);
         // check for flag if not already raised
         if self.asking_for_help == false && self.is_help_enabled() == true {
             self.asking_for_help =
                 self.check_flag(self.help.as_ref().unwrap().get_flag().clone())?;
         }
-        Ok(())
+        Ok(self.asking_for_help)
     }
 
     /// Clears the `asking_for_help` status flag.
@@ -488,12 +491,12 @@ impl Cli<Memory> {
             .is_some();
         if command_exists == true {
             // reset the parser state upon entering new subcommand
-            self.state = CliState::reset();
+            self.state = MemoryState::reset();
             let sub = Some(T::interpret(self)?);
-            self.state.proceed(CliState::ProcessingSubcommands);
+            self.state.proceed(MemoryState::ProcessingSubcommands);
             Ok(sub)
         } else {
-            self.state.proceed(CliState::ProcessingSubcommands);
+            self.state.proceed(MemoryState::ProcessingSubcommands);
             return Ok(None);
         }
     }
@@ -574,7 +577,7 @@ impl Cli<Memory> {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
-        self.state.proceed(CliState::ProcessingPositionals);
+        self.state.proceed(MemoryState::ProcessingPositionals);
         self.known_args.push(Arg::Positional(p));
         self.try_positional()
     }
@@ -586,7 +589,7 @@ impl Cli<Memory> {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
-        self.state.proceed(CliState::ProcessingPositionals);
+        self.state.proceed(MemoryState::ProcessingPositionals);
         if let Some(value) = self.get_positional(p)? {
             Ok(value)
         } else {
@@ -610,7 +613,7 @@ impl Cli<Memory> {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
-        self.state.proceed(CliState::ProcessingPositionals);
+        self.state.proceed(MemoryState::ProcessingPositionals);
         let mut result = Vec::<T>::new();
         result.push(self.require_positional(p)?);
         while let Some(v) = self.try_positional()? {
@@ -624,7 +627,7 @@ impl Cli<Memory> {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
-        self.state.proceed(CliState::ProcessingOptionals);
+        self.state.proceed(MemoryState::ProcessingOptionals);
         if let Some(value) = self.get_option(o)? {
             Ok(value)
         } else {
@@ -645,7 +648,7 @@ impl Cli<Memory> {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
-        self.state.proceed(CliState::ProcessingOptionals);
+        self.state.proceed(MemoryState::ProcessingOptionals);
         // collect information on where the flag can be found
         let mut locs = self.take_flag_locs(o.get_flag().get_name());
         if let Some(c) = o.get_flag().get_switch() {
@@ -708,7 +711,7 @@ impl Cli<Memory> {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
-        self.state.proceed(CliState::ProcessingOptionals);
+        self.state.proceed(MemoryState::ProcessingOptionals);
         let values = self.get_option_all::<T>(o)?;
         match values {
             // verify the size of the vector does not exceed `n`
@@ -732,7 +735,7 @@ impl Cli<Memory> {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
-        self.state.proceed(CliState::ProcessingOptionals);
+        self.state.proceed(MemoryState::ProcessingOptionals);
         // collect information on where the flag can be found
         let mut locs = self.take_flag_locs(o.get_flag().get_name());
         if let Some(c) = o.get_flag().get_switch() {
@@ -782,7 +785,7 @@ impl Cli<Memory> {
     ///
     /// Errors if the flag has an attached value or was raised multiple times.
     pub fn check_flag<'a>(&mut self, f: Flag) -> Result<bool> {
-        self.state.proceed(CliState::ProcessingFlags);
+        self.state.proceed(MemoryState::ProcessingFlags);
         let occurences = self.check_flag_all(f)?;
         match occurences > 1 {
             true => {
@@ -803,7 +806,7 @@ impl Cli<Memory> {
     ///
     /// Errors if the flag has an attached value. Returning a zero indicates the flag was never raised.
     pub fn check_flag_all<'a>(&mut self, f: Flag) -> Result<usize> {
-        self.state.proceed(CliState::ProcessingFlags);
+        self.state.proceed(MemoryState::ProcessingFlags);
         // collect information on where the flag can be found
         let mut locs = self.take_flag_locs(f.get_name());
         // try to find the switch locations
@@ -847,7 +850,7 @@ impl Cli<Memory> {
     ///
     /// Errors if the flag has an attached value. Returning a zero indicates the flag was never raised.
     pub fn check_flag_until<'a>(&mut self, f: Flag, limit: usize) -> Result<usize> {
-        self.state.proceed(CliState::ProcessingFlags);
+        self.state.proceed(MemoryState::ProcessingFlags);
         let occurences = self.check_flag_all(f)?;
         // verify the size of the vector does not exceed `n`
         match occurences <= limit {
@@ -865,7 +868,7 @@ impl Cli<Memory> {
     ///
     /// Note this mutates the referenced self only if an error is found.
     pub fn is_empty<'a>(&'a mut self) -> Result<()> {
-        self.state.proceed(CliState::End);
+        self.state.proceed(MemoryState::End);
         self.try_to_help()?;
         // check if map is empty, and return the minimum found index.
         if let Some((prefix, key, _)) = self.capture_bad_flag(self.tokens.len())? {
