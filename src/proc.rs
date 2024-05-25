@@ -1,5 +1,5 @@
 use crate::cli;
-use crate::cli::Cli;
+use crate::cli::CliProc;
 
 /// The return type for a [Command]'s execution process.
 pub type Result = std::result::Result<(), Box<dyn std::error::Error>>;
@@ -17,7 +17,7 @@ pub trait Command: Sized {
     /// Failure to map the appropriate data fields in the correct order according to
     /// the method in how they recieve their data from the command-line is considered
     /// a programmer's error and will result in a panic!.
-    fn construct(cli: &mut Cli) -> cli::Result<Self>;
+    fn interpret(cli: &mut CliProc) -> cli::Result<Self>;
 
     /// Processes the initialized struct and its defined data for an arbitrary
     /// task.
@@ -41,7 +41,7 @@ pub trait Subcommand<T>: Sized {
     /// Failure to map the appropriate data fields in the correct order according to
     /// the method in how they recieve their data from the command-line is considered
     /// a programmer's error and will result in a panic!.
-    fn construct(cli: &mut Cli) -> cli::Result<Self>;
+    fn interpret(cli: &mut CliProc) -> cli::Result<Self>;
 
     /// Processes the initialized struct and its defined data for an arbitrary
     /// task.
@@ -55,6 +55,7 @@ pub trait Subcommand<T>: Sized {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::cli::Cli;
     use crate::{arg::*, help::Help};
 
     /// Helper test fn to write vec of &str as iterator for Cli parameter.
@@ -72,7 +73,7 @@ mod test {
     }
 
     impl Subcommand<()> for Add {
-        fn construct(cli: &mut Cli) -> cli::Result<Self> {
+        fn interpret(cli: &mut CliProc) -> cli::Result<Self> {
             cli.check_help(Help::new().text("Usage: add <lhs> <rhs> [--verbose]"))?;
             // the ability to "learn options" beforehand is possible, or can be skipped
             // "learn options" here (take in known args (as ref?))
@@ -110,7 +111,7 @@ mod test {
     }
 
     impl Command for Op {
-        fn construct(cli: &mut Cli) -> cli::Result<Self> {
+        fn interpret(cli: &mut CliProc) -> cli::Result<Self> {
             let m = Ok(Op {
                 force: cli.check_flag(Flag::new("force"))?,
                 version: cli.check_flag(Flag::new("version"))?,
@@ -135,9 +136,9 @@ mod test {
     }
 
     impl Subcommand<()> for OpSubcommand {
-        fn construct(cli: &mut Cli) -> cli::Result<Self> {
+        fn interpret(cli: &mut CliProc) -> cli::Result<Self> {
             match cli.match_command(&["add", "mult", "sub"])?.as_ref() {
-                "add" => Ok(OpSubcommand::Add(Add::construct(cli)?)),
+                "add" => Ok(OpSubcommand::Add(Add::interpret(cli)?)),
                 _ => panic!("an unimplemented command was passed through!"),
             }
         }
@@ -152,7 +153,7 @@ mod test {
     #[test]
     fn make_add_command() {
         let mut cli = Cli::new().parse(args(vec!["add", "9", "10"]));
-        let add = Add::construct(&mut cli).unwrap();
+        let add = Add::interpret(&mut cli).unwrap();
         assert_eq!(
             add,
             Add {
@@ -164,7 +165,7 @@ mod test {
         );
 
         let mut cli = Cli::new().parse(args(vec!["add", "1", "4", "--verbose"]));
-        let add = Add::construct(&mut cli).unwrap();
+        let add = Add::interpret(&mut cli).unwrap();
         assert_eq!(
             add,
             Add {
@@ -176,7 +177,7 @@ mod test {
         );
 
         let mut cli = Cli::new().parse(args(vec!["add", "5", "--verbose", "2"]));
-        let add = Add::construct(&mut cli).unwrap();
+        let add = Add::interpret(&mut cli).unwrap();
         assert_eq!(
             add,
             Add {
@@ -191,7 +192,7 @@ mod test {
     #[test]
     fn nested_commands() {
         let mut cli = Cli::new().parse(args(vec!["op", "add", "9", "10"]));
-        let op = Op::construct(&mut cli).unwrap();
+        let op = Op::interpret(&mut cli).unwrap();
         assert_eq!(
             op,
             Op {
@@ -207,7 +208,7 @@ mod test {
         );
 
         let mut cli = Cli::new().parse(args(vec!["op"]));
-        let op = Op::construct(&mut cli).unwrap();
+        let op = Op::interpret(&mut cli).unwrap();
         assert_eq!(
             op,
             Op {
@@ -218,7 +219,7 @@ mod test {
         );
 
         let mut cli = Cli::new().parse(args(vec!["op", "--version", "add", "9", "10"]));
-        let op = Op::construct(&mut cli).unwrap();
+        let op = Op::interpret(&mut cli).unwrap();
         assert_eq!(
             op,
             Op {
@@ -235,7 +236,7 @@ mod test {
 
         // out-of-context arg '--verbose' move it after 'add'
         let mut cli = Cli::new().parse(args(vec!["op", "--verbose", "add", "9", "10"]));
-        let op = Op::construct(&mut cli);
+        let op = Op::interpret(&mut cli);
         assert!(op.is_err());
     }
 
@@ -243,13 +244,13 @@ mod test {
     #[should_panic]
     fn unimplemented_nested_command() {
         let mut cli = Cli::new().parse(args(vec!["op", "mult", "9", "10"]));
-        let _ = Op::construct(&mut cli);
+        let _ = Op::interpret(&mut cli);
     }
 
     #[test]
     fn reuse_collected_arg() {
         let mut cli = Cli::new().parse(args(vec!["op", "--version", "add", "9", "10", "--force"]));
-        let op = Op::construct(&mut cli).unwrap();
+        let op = Op::interpret(&mut cli).unwrap();
         assert_eq!(
             op,
             Op {

@@ -1,5 +1,5 @@
 use cliproc::{cli, proc};
-use cliproc::{Cli, Command, ExitCode, Help, Optional};
+use cliproc::{Cli, CliProc, Command, ExitCode, Help, Optional};
 use std::env;
 
 // 1. Define the struct and the data required to perform its task
@@ -11,7 +11,7 @@ struct Demo {
 // 2. Implement the `Command` trait to allow a struct to function as a command
 impl Command for Demo {
     // 2a. Map the command-line data to the struct's data
-    fn construct(cli: &mut Cli) -> cli::Result<Self> {
+    fn interpret(cli: &mut CliProc) -> cli::Result<Self> {
         cli.check_help(Help::default().text(HELP))?;
         Ok(Demo {
             name: cli.require_option(Optional::new("name").switch('n'))?,

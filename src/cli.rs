@@ -106,7 +106,7 @@ impl Slot {
 }
 
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
-enum ParserState {
+enum CliState {
     Start,
     ProcessingFlags,
     ProcessingOptionals,
@@ -115,9 +115,9 @@ enum ParserState {
     End,
 }
 
-impl ParserState {
+impl CliState {
     /// Ensures the previous state (`self`) can transition to the next state (`next`).
-    pub fn proceed(&mut self, mut next: ParserState) {
+    pub fn proceed(&mut self, mut next: CliState) {
         // panic if we are already advanced past the next state
         if self > &mut next {
             panic!("{}: argument discovery is in an invalid order: invalid state transition from {:?} to {:?}", "panic!".red().bold().underline(), self, next)
@@ -133,55 +133,73 @@ impl ParserState {
 
 #[derive(Debug, PartialEq)]
 pub struct Cli {
-    tokens: Vec<Option<Token>>,
-    opt_store: HashMap<Tag<String>, Slot>,
-    known_args: Vec<Arg>,
-    asking_for_help: bool,
-    state: ParserState,
-    // external attributes
-    help: Option<Help>,
-    prioritize_help: bool,
-    cap_mode: CapMode,
-    threshold: Cost,
-}
-
-impl Default for Cli {
-    fn default() -> Self {
-        Self {
-            tokens: Vec::new(),
-            opt_store: HashMap::new(),
-            known_args: Vec::new(),
-            help: None,
-            asking_for_help: false,
-            prioritize_help: true,
-            cap_mode: CapMode::default(),
-            threshold: 2,
-            state: ParserState::Start,
-        }
-    }
+    pub prioritize_help: bool,
+    pub cap_mode: CapMode,
+    pub threshold: Cost,
+    pub capacity: usize,
 }
 
 impl Cli {
-    /// Creates a minimal `Cli` struct.
     pub fn new() -> Self {
         Self {
-            tokens: Vec::new(),
-            opt_store: HashMap::new(),
-            known_args: Vec::new(),
-            help: None,
-            asking_for_help: false,
-            cap_mode: CapMode::Manual,
             prioritize_help: true,
+            cap_mode: CapMode::Manual,
             threshold: 0,
-            state: ParserState::Start,
+            capacity: 0,
         }
     }
 
-    /// Builds the `Cli` struct by perfoming lexical analysis on the vector of
-    /// `String`.
-    pub fn parse<T: Iterator<Item = String>>(mut self, args: T) -> Self {
-        let mut tokens = Vec::<Option<Token>>::with_capacity(5);
-        let mut store = HashMap::with_capacity(5);
+    pub fn with_capacity(mut self, cap: usize) -> Self {
+        self.capacity = cap;
+        self
+    }
+
+    /// Sets the maximum threshold value when comparing strings for character similiarity.
+    pub fn threshold(mut self, cost: Cost) -> Self {
+        self.threshold = cost;
+        self
+    }
+
+    /// Automatically uppercase error messages.
+    pub fn auto_uppercase_errors(mut self) -> Self {
+        self.cap_mode = CapMode::Upper;
+        self
+    }
+
+    /// Automatically lowercase error messages.
+    pub fn auto_lowercase_errors(mut self) -> Self {
+        self.cap_mode = CapMode::Lower;
+        self
+    }
+
+    /// Do not allow any formatting on error messages.
+    pub fn disable_auto_case_errors(mut self) -> Self {
+        self.cap_mode = CapMode::Manual;
+        self
+    }
+
+    /// Downplays the help action to not become a priority error over other errors in the parsing.
+    ///
+    /// Help is prioritized by default.
+    pub fn deprioritize_help(mut self) -> Self {
+        self.prioritize_help = false;
+        self
+    }
+
+    /// Prioritizes the help action over other errors during parsing.
+    ///
+    /// This is enabled by default.
+    pub fn prioritize_help(mut self) -> Self {
+        self.prioritize_help = true;
+        self
+    }
+
+    /// Builds the [Cli] struct by tranlating the vector of [String] items into
+    /// a series of tokens.
+    pub fn parse<T: Iterator<Item = String>>(self, args: T) -> CliProc {
+        let mut cli = CliProc::from_cli(self);
+        let mut tokens = Vec::<Option<Token>>::with_capacity(cli.tokens.capacity());
+        let mut store = HashMap::with_capacity(cli.tokens.capacity());
         let mut terminated = false;
         let mut args = args.skip(1).enumerate();
         while let Some((i, mut arg)) = args.next() {
@@ -254,223 +272,49 @@ impl Cli {
                 tokens.push(Some(Token::UnattachedArgument(i, arg)));
             }
         }
-
-        self.tokens = tokens;
-        self.opt_store = store;
-        self
+        cli.tokens = tokens;
+        cli.store = store;
+        cli
     }
+}
 
-    /// Sets the maximum threshold value when comparing strings for character similiarity.
-    pub fn threshold(mut self, cost: Cost) -> Self {
-        self.threshold = cost;
-        self
-    }
-
-    /// Automatically uppercase error messages.
-    pub fn auto_uppercase_errors(mut self) -> Self {
-        self.cap_mode = CapMode::Upper;
-        self
-    }
-
-    /// Automatically lowercase error messages.
-    pub fn auto_lowercase_errors(mut self) -> Self {
-        self.cap_mode = CapMode::Lower;
-        self
-    }
-
-    /// Do not allow any formatting on error messages.
-    pub fn disable_auto_case_errors(mut self) -> Self {
-        self.cap_mode = CapMode::Manual;
-        self
-    }
-
-    /// Sets the [Help] attribute to display and checks if help has already been raised in the token stream.
-    pub fn check_help(&mut self, help: Help) -> Result<()> {
-        self.help = Some(help);
-        // check for flag if not already raised
-        if self.asking_for_help == false && self.is_help_enabled() == true {
-            self.asking_for_help =
-                self.check_flag(self.help.as_ref().unwrap().get_flag().clone())?;
-        }
-        Ok(())
-    }
-
-    /// Clears the `asking_for_help` status flag.
-    pub fn clear_help(&mut self) -> () {
-        self.asking_for_help = false;
-    }
-
-    /// Directly calls the help error if asking for help is enabled.
-    pub fn raise_help(&self) -> Result<()> {
-        self.prioritize_help()
-    }
-
-    /// Removes the current help text set for the command-line argument parser.
-    pub fn disable_help(&mut self) -> () {
-        self.help = None;
-    }
-
-    /// Downplays the help action to not become a priority error over other errors in the parsing.
-    ///
-    /// Help is prioritized by default.
-    pub fn downplay_help(mut self) -> Self {
-        self.prioritize_help = false;
-        self
-    }
-
-    /// Prioritizes the help action over other errors during parsing.
-    ///
-    /// This is enabled by default.
-    pub fn emphasize_help(mut self) -> Self {
-        self.prioritize_help = true;
-        self
-    }
-
-    /// Checks if help is enabled and is some value.
-    fn is_help_enabled(&self) -> bool {
-        self.help.is_some()
-    }
-
-    /// Checks if help has been raised and will return its own error for displaying
-    /// help.
-    fn prioritize_help(&self) -> Result<()> {
-        if self.prioritize_help == true
-            && self.asking_for_help == true
-            && self.is_help_enabled() == true
-        {
-            Err(Error::new(
-                self.help.clone(),
-                ErrorKind::Help,
-                ErrorContext::Help,
-                self.cap_mode,
-            ))
-        } else {
-            Ok(())
+impl Default for Cli {
+    fn default() -> Self {
+        Self {
+            prioritize_help: true,
+            cap_mode: CapMode::default(),
+            threshold: 2,
+            capacity: 0,
         }
     }
+}
 
-    /// Pulls the next `UnattachedArg` token from the token stream.
-    ///
-    /// If no more `UnattachedArg` tokens are left, it will return none.
-    fn next_uarg(&mut self) -> Option<String> {
-        if let Some(p) = self.tokens.iter_mut().find(|s| match s {
-            Some(Token::UnattachedArgument(_, _)) | Some(Token::Terminator(_)) => true,
-            _ => false,
-        }) {
-            if let Some(Token::Terminator(_)) = p {
-                None
-            } else {
-                Some(p.take().unwrap().take_str())
-            }
-        } else {
-            None
+#[derive(Debug, PartialEq)]
+pub struct CliProc {
+    /// The order-preserved list of tokens
+    tokens: Vec<Option<Token>>,
+    /// A lookup table for identifying which positions in the token stream a given option is present
+    store: HashMap<Tag<String>, Slot>,
+    /// The list of arguments has they are processed by the Cli processor
+    known_args: Vec<Arg>,
+    asking_for_help: bool,
+    help: Option<Help>,
+    state: CliState,
+    options: Cli,
+}
+
+// Internal methods
+impl CliProc {
+    fn from_cli(proc: Cli) -> Self {
+        Self {
+            tokens: Vec::with_capacity(proc.capacity),
+            store: HashMap::with_capacity(proc.capacity),
+            known_args: Vec::with_capacity(proc.capacity),
+            help: None,
+            asking_for_help: false,
+            state: CliState::Start,
+            options: proc,
         }
-    }
-
-    /// Determines if an `UnattachedArg` exists to be served as a subcommand.
-    ///
-    /// If so, it will call `from_cli` on the type defined. If not, it will return none.
-    pub fn check_command<'a, T: Subcommand<U>, U>(&mut self, p: Positional) -> Result<Option<T>> {
-        self.known_args.push(Arg::Positional(p));
-        // check but do not remove if an unattached arg exists
-        let command_exists = self
-            .tokens
-            .iter()
-            .find(|f| match f {
-                Some(Token::UnattachedArgument(_, _)) => true,
-                _ => false,
-            })
-            .is_some();
-        if command_exists == true {
-            // reset the parser state upon entering new subcommand
-            self.state = ParserState::reset();
-            let sub = Some(T::construct(self)?);
-            self.state.proceed(ParserState::ProcessingSubcommands);
-            Ok(sub)
-        } else {
-            self.state.proceed(ParserState::ProcessingSubcommands);
-            return Ok(None);
-        }
-    }
-
-    /// Tries to match the next `UnattachedArg` with a list of given `words`.
-    ///
-    /// If fails, it will attempt to offer a spelling suggestion if the name is close.
-    ///
-    /// Panics if there is not a next `UnattachedArg`. It is recommended to not directly call
-    /// this command, but through a `from_cli` call after `check_command` has been issued.
-    pub fn match_command<T: AsRef<str> + std::cmp::PartialEq>(
-        &mut self,
-        words: &[T],
-    ) -> Result<String> {
-        // find the unattached arg's index before it is removed from the token stream
-        let i: usize = self
-            .tokens
-            .iter()
-            .find_map(|f| match f {
-                Some(Token::UnattachedArgument(i, _)) => Some(*i),
-                _ => None,
-            })
-            .expect("an unattached argument must exist before calling `match_command`");
-        let command = self
-            .next_uarg()
-            .expect("`check_command` must be called before this function");
-        // perform partial clean to ensure no arguments are remaining behind the command (uncaught options)
-        let ooc_arg = self.capture_bad_flag(i)?;
-
-        if words.iter().find(|p| p.as_ref() == command).is_some() {
-            if let Some((prefix, key, pos)) = ooc_arg {
-                if pos < i {
-                    self.prioritize_help()?;
-                    return Err(Error::new(
-                        self.help.clone(),
-                        ErrorKind::OutOfContextArgSuggest,
-                        ErrorContext::OutofContextArgSuggest(format!("{}{}", prefix, key), command),
-                        self.cap_mode,
-                    ));
-                }
-            }
-            Ok(command)
-        // try to offer a spelling suggestion otherwise say we've hit an unexpected argument
-        } else {
-            // bypass sequence alignment algorithm if threshold == 0
-            if let Some(w) = if self.threshold > 0 {
-                seqalin::sel_min_edit_str(&command, &words, self.threshold)
-            } else {
-                None
-            } {
-                Err(Error::new(
-                    self.help.clone(),
-                    ErrorKind::SuggestSubcommand,
-                    ErrorContext::SuggestWord(command, w.to_string()),
-                    self.cap_mode,
-                ))
-            } else {
-                self.prioritize_help()?;
-                Err(Error::new(
-                    self.help.clone(),
-                    ErrorKind::UnknownSubcommand,
-                    ErrorContext::UnknownSubcommand(
-                        self.known_args.pop().expect("requires positional argument"),
-                        command,
-                    ),
-                    self.cap_mode,
-                ))
-            }
-        }
-    }
-
-    /// Serves the next `Positional` value in the token stream parsed as `T`.
-    ///
-    /// Errors if parsing fails. If the next argument is not a positional, it will
-    /// not move forward in the token stream.
-    pub fn check_positional<'a, T: FromStr>(&mut self, p: Positional) -> Result<Option<T>>
-    where
-        <T as FromStr>::Err: 'static + std::error::Error,
-    {
-        self.state.proceed(ParserState::ProcessingPositionals);
-        self.known_args.push(Arg::Positional(p));
-        self.try_positional()
     }
 
     /// Attempts to extract the next unattached argument to get a positional with valid parsing.
@@ -494,337 +338,11 @@ impl Cli {
                             word,
                             Box::new(err),
                         ),
-                        self.cap_mode,
+                        self.options.cap_mode,
                     ))
                 }
             },
             None => Ok(None),
-        }
-    }
-
-    /// Forces the next [Positional] to exist from token stream.
-    ///
-    /// Errors if parsing fails or if no unattached argument is left in the token stream.
-    pub fn require_positional<'a, T: FromStr>(&mut self, p: Positional) -> Result<T>
-    where
-        <T as FromStr>::Err: 'static + std::error::Error,
-    {
-        self.state.proceed(ParserState::ProcessingPositionals);
-        if let Some(value) = self.check_positional(p)? {
-            Ok(value)
-        } else {
-            self.prioritize_help()?;
-            self.is_empty()?;
-            Err(Error::new(
-                self.help.clone(),
-                ErrorKind::MissingPositional,
-                ErrorContext::FailedArg(self.known_args.pop().unwrap()),
-                self.cap_mode,
-            ))
-        }
-    }
-
-    /// Forces all the next [Positional] to be captured from the token stream.
-    ///
-    /// Errors if parsing fails or if zero unattached arguments are left in the token stream to begin.
-    ///
-    /// The resulting vector is guaranteed to have `.len() >= 1`.
-    pub fn require_positional_all<'a, T: FromStr>(&mut self, p: Positional) -> Result<Vec<T>>
-    where
-        <T as FromStr>::Err: 'static + std::error::Error,
-    {
-        self.state.proceed(ParserState::ProcessingPositionals);
-        let mut result = Vec::<T>::new();
-        result.push(self.require_positional(p)?);
-        while let Some(v) = self.try_positional()? {
-            result.push(v);
-        }
-        Ok(result)
-    }
-
-    /// Iterates through the list of tokens to find the first suggestion against a flag to return.
-    ///
-    /// Returns ok if cannot make a suggestion.
-    fn prioritize_suggestion(&self) -> Result<()> {
-        let mut kv: Vec<(&String, &Vec<usize>)> = self
-            .opt_store
-            .iter()
-            .map(|(tag, slot)| (tag.as_ref(), slot.get_indices()))
-            .collect::<Vec<(&String, &Vec<usize>)>>();
-        kv.sort_by(|a, b| a.1.first().unwrap().cmp(b.1.first().unwrap()));
-        let bank: Vec<&str> = self.known_args_as_flag_names().into_iter().collect();
-        let r = kv
-            .iter()
-            .find_map(|f| match self.tokens.get(*f.1.first().unwrap()).unwrap() {
-                Some(Token::Flag(_)) => {
-                    if let Some(word) = if self.threshold > 0 {
-                        seqalin::sel_min_edit_str(f.0, &bank, self.threshold)
-                    } else {
-                        None
-                    } {
-                        Some(Error::new(
-                            self.help.clone(),
-                            ErrorKind::SuggestArg,
-                            ErrorContext::SuggestWord(
-                                format!("{}{}", symbol::FLAG, f.0),
-                                format!("{}{}", symbol::FLAG, word),
-                            ),
-                            self.cap_mode,
-                        ))
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            });
-        if self.asking_for_help == true {
-            Ok(())
-        } else if let Some(e) = r {
-            Err(e)
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Queries for an expected value of `Optional`.
-    pub fn require_option<'a, T: FromStr>(&mut self, o: Optional) -> Result<T>
-    where
-        <T as FromStr>::Err: 'static + std::error::Error,
-    {
-        self.state.proceed(ParserState::ProcessingOptionals);
-        if let Some(value) = self.check_option(o)? {
-            Ok(value)
-        } else {
-            self.prioritize_help()?;
-            self.is_empty()?;
-            Err(Error::new(
-                self.help.clone(),
-                ErrorKind::MissingOption,
-                ErrorContext::FailedArg(self.known_args.pop().unwrap()),
-                self.cap_mode,
-            ))
-        }
-    }
-    /// Queries for a value of `Optional`.
-    ///
-    /// Errors if there are multiple values or if parsing fails.
-    pub fn check_option<'a, T: FromStr>(&mut self, o: Optional) -> Result<Option<T>>
-    where
-        <T as FromStr>::Err: 'static + std::error::Error,
-    {
-        self.state.proceed(ParserState::ProcessingOptionals);
-        // collect information on where the flag can be found
-        let mut locs = self.take_flag_locs(o.get_flag().get_name());
-        if let Some(c) = o.get_flag().get_switch() {
-            locs.extend(self.take_switch_locs(c));
-        }
-        self.known_args.push(Arg::Optional(o));
-        // pull values from where the option flags were found (including switch)
-        let mut values = self.pull_flag(locs, true);
-        match values.len() {
-            1 => {
-                if let Some(word) = values.pop().unwrap() {
-                    let result = word.parse::<T>();
-                    match result {
-                        Ok(r) => Ok(Some(r)),
-                        Err(err) => {
-                            self.prioritize_help()?;
-                            Err(Error::new(
-                                self.help.clone(),
-                                ErrorKind::BadType,
-                                ErrorContext::FailedCast(
-                                    self.known_args.pop().unwrap(),
-                                    word,
-                                    Box::new(err),
-                                ),
-                                self.cap_mode,
-                            ))
-                        }
-                    }
-                } else {
-                    self.prioritize_help()?;
-                    Err(Error::new(
-                        self.help.clone(),
-                        ErrorKind::ExpectingValue,
-                        ErrorContext::FailedArg(self.known_args.pop().unwrap()),
-                        self.cap_mode,
-                    ))
-                }
-            }
-            0 => Ok(None),
-            _ => {
-                self.prioritize_help()?;
-                Err(Error::new(
-                    self.help.clone(),
-                    ErrorKind::DuplicateOptions,
-                    ErrorContext::FailedArg(self.known_args.pop().unwrap()),
-                    self.cap_mode,
-                ))
-            }
-        }
-    }
-
-    /// Queries for up to `n` values behind an `Optional`.
-    ///
-    /// Errors if a parsing fails from string or if the number of detected optionals is > n.
-    pub fn check_option_n<'a, T: FromStr>(
-        &mut self,
-        o: Optional,
-        n: usize,
-    ) -> Result<Option<Vec<T>>>
-    where
-        <T as FromStr>::Err: 'static + std::error::Error,
-    {
-        self.state.proceed(ParserState::ProcessingOptionals);
-        let values = self.check_option_all::<T>(o)?;
-        match values {
-            // verify the size of the vector does not exceed `n`
-            Some(r) => match r.len() <= n {
-                true => Ok(Some(r)),
-                false => Err(Error::new(
-                    self.help.clone(),
-                    ErrorKind::ExceedingMaxCount,
-                    ErrorContext::ExceededThreshold(self.known_args.pop().unwrap(), r.len(), n),
-                    self.cap_mode,
-                )),
-            },
-            None => Ok(None),
-        }
-    }
-
-    /// Queries for all values behind an `Optional`.
-    ///
-    /// Errors if a parsing fails from string.
-    pub fn check_option_all<'a, T: FromStr>(&mut self, o: Optional) -> Result<Option<Vec<T>>>
-    where
-        <T as FromStr>::Err: 'static + std::error::Error,
-    {
-        self.state.proceed(ParserState::ProcessingOptionals);
-        // collect information on where the flag can be found
-        let mut locs = self.take_flag_locs(o.get_flag().get_name());
-        if let Some(c) = o.get_flag().get_switch() {
-            locs.extend(self.take_switch_locs(c));
-        }
-        self.known_args.push(Arg::Optional(o));
-        // pull values from where the option flags were found (including switch)
-        let values = self.pull_flag(locs, true);
-        if values.is_empty() == true {
-            return Ok(None);
-        }
-        // try to convert each value into the type T
-        let mut transform = Vec::<T>::with_capacity(values.len());
-        for val in values {
-            if let Some(word) = val {
-                let result = word.parse::<T>();
-                match result {
-                    Ok(r) => transform.push(r),
-                    Err(err) => {
-                        self.prioritize_help()?;
-                        return Err(Error::new(
-                            self.help.clone(),
-                            ErrorKind::BadType,
-                            ErrorContext::FailedCast(
-                                self.known_args.pop().unwrap(),
-                                word,
-                                Box::new(err),
-                            ),
-                            self.cap_mode,
-                        ));
-                    }
-                }
-            } else {
-                self.prioritize_help()?;
-                return Err(Error::new(
-                    self.help.clone(),
-                    ErrorKind::ExpectingValue,
-                    ErrorContext::FailedArg(self.known_args.pop().unwrap()),
-                    self.cap_mode,
-                ));
-            }
-        }
-        Ok(Some(transform))
-    }
-
-    /// Queries if a flag was raised once and only once.
-    ///
-    /// Errors if the flag has an attached value or was raised multiple times.
-    pub fn check_flag<'a>(&mut self, f: Flag) -> Result<bool> {
-        self.state.proceed(ParserState::ProcessingFlags);
-        let occurences = self.check_flag_all(f)?;
-        match occurences > 1 {
-            true => {
-                self.prioritize_help()?;
-                Err(Error::new(
-                    self.help.clone(),
-                    ErrorKind::DuplicateOptions,
-                    ErrorContext::FailedArg(self.known_args.pop().unwrap()),
-                    self.cap_mode,
-                ))
-            }
-            // the flag was either raised once or not at all
-            false => Ok(occurences == 1),
-        }
-    }
-
-    /// Queries for the number of times a flag was raised.
-    ///
-    /// Errors if the flag has an attached value. Returning a zero indicates the flag was never raised.
-    pub fn check_flag_all<'a>(&mut self, f: Flag) -> Result<usize> {
-        self.state.proceed(ParserState::ProcessingFlags);
-        // collect information on where the flag can be found
-        let mut locs = self.take_flag_locs(f.get_name());
-        // try to find the switch locations
-        if let Some(c) = f.get_switch() {
-            locs.extend(self.take_switch_locs(c));
-        };
-        self.known_args.push(Arg::Flag(f));
-        let mut occurences = self.pull_flag(locs, false);
-        // verify there are no values attached to this flag
-        if let Some(val) = occurences.iter_mut().find(|p| p.is_some()) {
-            self.prioritize_help()?;
-            return Err(Error::new(
-                self.help.clone(),
-                ErrorKind::UnexpectedValue,
-                ErrorContext::UnexpectedValue(self.known_args.pop().unwrap(), val.take().unwrap()),
-                self.cap_mode,
-            ));
-        } else {
-            let raised = occurences.len() != 0;
-            // check if the user is asking for help by raising the help flag
-            if let Some(hp) = &self.help {
-                if raised == true
-                    && hp.get_flag().get_name()
-                        == self
-                            .known_args
-                            .last()
-                            .unwrap()
-                            .as_flag()
-                            .unwrap()
-                            .get_name()
-                {
-                    self.asking_for_help = true;
-                }
-            }
-            // return the number of times the flag was raised
-            Ok(occurences.len())
-        }
-    }
-
-    /// Queries for the number of times a flag was raised up until `n` times.
-    ///
-    /// Errors if the flag has an attached value. Returning a zero indicates the flag was never raised.
-    pub fn check_flag_n<'a>(&mut self, f: Flag, n: usize) -> Result<usize> {
-        self.state.proceed(ParserState::ProcessingFlags);
-        let occurences = self.check_flag_all(f)?;
-        // verify the size of the vector does not exceed `n`
-        match occurences <= n {
-            true => Ok(occurences),
-            false => Err(Error::new(
-                self.help.clone(),
-                ErrorKind::ExceedingMaxCount,
-                ErrorContext::ExceededThreshold(self.known_args.pop().unwrap(), occurences, n),
-                self.cap_mode,
-            )),
         }
     }
 
@@ -851,7 +369,7 @@ impl Cli {
     fn find_first_flag_left(&self, breakpoint: usize) -> Option<(&str, usize)> {
         let mut min_i: Option<(&str, usize)> = None;
         let mut opt_it = self
-            .opt_store
+            .store
             .iter()
             .filter(|(_, slot)| slot.is_visited() == false);
         while let Some((key, val)) = opt_it.next() {
@@ -878,8 +396,8 @@ impl Cli {
                     Token::Flag(_) => {
                         // try to match it with a valid flag from word bank
                         let bank: Vec<&str> = self.known_args_as_flag_names().into_iter().collect();
-                        if let Some(closest) = if self.threshold > 0 {
-                            seqalin::sel_min_edit_str(key, &bank, self.threshold)
+                        if let Some(closest) = if self.options.threshold > 0 {
+                            seqalin::sel_min_edit_str(key, &bank, self.options.threshold)
                         } else {
                             None
                         } {
@@ -890,7 +408,7 @@ impl Cli {
                                     format!("{}{}", symbol::FLAG, key),
                                     format!("{}{}", symbol::FLAG, closest),
                                 ),
-                                self.cap_mode,
+                                self.options.cap_mode,
                             ));
                         }
                         symbol::FLAG
@@ -906,37 +424,71 @@ impl Cli {
         }
     }
 
-    /// Verifies there are no more tokens remaining in the stream.
+    /// Returns all locations in the token stream where the flag identifier `tag` is found.
     ///
-    /// Note this mutates the referenced self only if an error is found.
-    pub fn is_empty<'a>(&'a mut self) -> Result<()> {
-        self.state.proceed(ParserState::End);
-        self.prioritize_help()?;
-        // check if map is empty, and return the minimum found index.
-        if let Some((prefix, key, _)) = self.capture_bad_flag(self.tokens.len())? {
-            Err(Error::new(
-                self.help.clone(),
-                ErrorKind::UnexpectedArg,
-                ErrorContext::UnexpectedArg(format!("{}{}", prefix, key)),
-                self.cap_mode,
-            ))
-        // find first non-none token
-        } else if let Some(t) = self.tokens.iter().find(|p| p.is_some()) {
-            match t {
-                Some(Token::UnattachedArgument(_, word)) => Err(Error::new(
-                    self.help.clone(),
-                    ErrorKind::UnexpectedArg,
-                    ErrorContext::UnexpectedArg(word.to_string()),
-                    self.cap_mode,
-                )),
-                Some(Token::Terminator(_)) => Err(Error::new(
-                    self.help.clone(),
-                    ErrorKind::UnexpectedArg,
-                    ErrorContext::UnexpectedArg(symbol::FLAG.to_string()),
-                    self.cap_mode,
-                )),
-                _ => panic!("no other tokens types should be left"),
-            }
+    /// Information about Option<Vec<T>> vs. empty Vec<T>: https://users.rust-lang.org/t/space-time-usage-to-construct-vec-t-vs-option-vec-t/35596/6
+    fn take_flag_locs(&mut self, tag: &str) -> Vec<usize> {
+        if let Some(slot) = self.store.get_mut(&Tag::Flag(tag.to_owned())) {
+            slot.visit();
+            slot.get_indices().to_vec()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Returns all locations in the token stream where the switch identifier `c` is found.
+    fn take_switch_locs(&mut self, c: &char) -> Vec<usize> {
+        // allocate &str to the stack and not the heap to get from store
+        let mut arr = [0; 4];
+        let tag = c.encode_utf8(&mut arr);
+
+        if let Some(slot) = self.store.get_mut(&Tag::Switch(tag.to_owned())) {
+            slot.visit();
+            slot.get_indices().to_vec()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Iterates through the list of tokens to find the first suggestion against a flag to return.
+    ///
+    /// Returns ok if cannot make a suggestion.
+    fn prioritize_suggestion(&self) -> Result<()> {
+        let mut kv: Vec<(&String, &Vec<usize>)> = self
+            .store
+            .iter()
+            .map(|(tag, slot)| (tag.as_ref(), slot.get_indices()))
+            .collect::<Vec<(&String, &Vec<usize>)>>();
+        kv.sort_by(|a, b| a.1.first().unwrap().cmp(b.1.first().unwrap()));
+        let bank: Vec<&str> = self.known_args_as_flag_names().into_iter().collect();
+        let r = kv
+            .iter()
+            .find_map(|f| match self.tokens.get(*f.1.first().unwrap()).unwrap() {
+                Some(Token::Flag(_)) => {
+                    if let Some(word) = if self.options.threshold > 0 {
+                        seqalin::sel_min_edit_str(f.0, &bank, self.options.threshold)
+                    } else {
+                        None
+                    } {
+                        Some(Error::new(
+                            self.help.clone(),
+                            ErrorKind::SuggestArg,
+                            ErrorContext::SuggestWord(
+                                format!("{}{}", symbol::FLAG, f.0),
+                                format!("{}{}", symbol::FLAG, word),
+                            ),
+                            self.options.cap_mode,
+                        ))
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            });
+        if self.asking_for_help == true {
+            Ok(())
+        } else if let Some(e) = r {
+            Err(e)
         } else {
             Ok(())
         }
@@ -974,6 +526,502 @@ impl Cli {
             .collect()
     }
 
+    /// Pulls the next `UnattachedArg` token from the token stream.
+    ///
+    /// If no more `UnattachedArg` tokens are left, it will return none.
+    fn next_uarg(&mut self) -> Option<String> {
+        if let Some(p) = self.tokens.iter_mut().find(|s| match s {
+            Some(Token::UnattachedArgument(_, _)) | Some(Token::Terminator(_)) => true,
+            _ => false,
+        }) {
+            if let Some(Token::Terminator(_)) = p {
+                None
+            } else {
+                Some(p.take().unwrap().take_str())
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Checks if help is enabled and is some value.
+    fn is_help_enabled(&self) -> bool {
+        // change to does_help_exist()
+        self.help.is_some()
+    }
+
+    /// Checks if help has been raised and will return its own error for displaying
+    /// help.
+    fn prioritize_help(&self) -> Result<()> {
+        if self.options.prioritize_help == true
+            && self.asking_for_help == true
+            && self.is_help_enabled() == true
+        {
+            Err(Error::new(
+                self.help.clone(),
+                ErrorKind::Help,
+                ErrorContext::Help,
+                self.options.cap_mode,
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+// Public API
+impl CliProc {
+    /// Sets the [Help] attribute to display and checks if help has already been raised in the token stream.
+    pub fn check_help(&mut self, help: Help) -> Result<()> {
+        self.help = Some(help);
+        // check for flag if not already raised
+        if self.asking_for_help == false && self.is_help_enabled() == true {
+            self.asking_for_help =
+                self.check_flag(self.help.as_ref().unwrap().get_flag().clone())?;
+        }
+        Ok(())
+    }
+
+    /// Clears the `asking_for_help` status flag.
+    pub fn clear_help(&mut self) -> () {
+        self.asking_for_help = false;
+    }
+
+    /// Directly calls the help error if asking for help is enabled.
+    pub fn raise_help(&self) -> Result<()> {
+        self.prioritize_help()
+    }
+
+    /// Removes the current help text set for the command-line argument parser.
+    pub fn disable_help(&mut self) -> () {
+        self.help = None;
+    }
+
+    /// Determines if an `UnattachedArg` exists to be served as a subcommand.
+    ///
+    /// If so, it will call `from_cli` on the type defined. If not, it will return none.
+    pub fn check_command<'a, T: Subcommand<U>, U>(&mut self, p: Positional) -> Result<Option<T>> {
+        self.known_args.push(Arg::Positional(p));
+        // check but do not remove if an unattached arg exists
+        let command_exists = self
+            .tokens
+            .iter()
+            .find(|f| match f {
+                Some(Token::UnattachedArgument(_, _)) => true,
+                _ => false,
+            })
+            .is_some();
+        if command_exists == true {
+            // reset the parser state upon entering new subcommand
+            self.state = CliState::reset();
+            let sub = Some(T::interpret(self)?);
+            self.state.proceed(CliState::ProcessingSubcommands);
+            Ok(sub)
+        } else {
+            self.state.proceed(CliState::ProcessingSubcommands);
+            return Ok(None);
+        }
+    }
+
+    /// Tries to match the next `UnattachedArg` with a list of given `words`.
+    ///
+    /// If fails, it will attempt to offer a spelling suggestion if the name is close.
+    ///
+    /// Panics if there is not a next `UnattachedArg`. It is recommended to not directly call
+    /// this command, but through a `from_cli` call after `check_command` has been issued.
+    pub fn match_command<T: AsRef<str> + std::cmp::PartialEq>(
+        &mut self,
+        words: &[T],
+    ) -> Result<String> {
+        // find the unattached arg's index before it is removed from the token stream
+        let i: usize = self
+            .tokens
+            .iter()
+            .find_map(|f| match f {
+                Some(Token::UnattachedArgument(i, _)) => Some(*i),
+                _ => None,
+            })
+            .expect("an unattached argument must exist before calling `match_command`");
+        let command = self
+            .next_uarg()
+            .expect("`check_command` must be called before this function");
+
+        // perform partial clean to ensure no arguments are remaining behind the command (uncaught options)
+        let ooc_arg = self.capture_bad_flag(i)?;
+
+        if words.iter().find(|p| p.as_ref() == command).is_some() {
+            if let Some((prefix, key, pos)) = ooc_arg {
+                if pos < i {
+                    self.prioritize_help()?;
+                    return Err(Error::new(
+                        self.help.clone(),
+                        ErrorKind::OutOfContextArgSuggest,
+                        ErrorContext::OutofContextArgSuggest(format!("{}{}", prefix, key), command),
+                        self.options.cap_mode,
+                    ));
+                }
+            }
+            Ok(command)
+        // try to offer a spelling suggestion otherwise say we've hit an unexpected argument
+        } else {
+            // bypass sequence alignment algorithm if threshold == 0
+            if let Some(w) = if self.options.threshold > 0 {
+                seqalin::sel_min_edit_str(&command, &words, self.options.threshold)
+            } else {
+                None
+            } {
+                Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::SuggestSubcommand,
+                    ErrorContext::SuggestWord(command, w.to_string()),
+                    self.options.cap_mode,
+                ))
+            } else {
+                self.prioritize_help()?;
+                Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::UnknownSubcommand,
+                    ErrorContext::UnknownSubcommand(
+                        self.known_args.pop().expect("requires positional argument"),
+                        command,
+                    ),
+                    self.options.cap_mode,
+                ))
+            }
+        }
+    }
+
+    /// Serves the next `Positional` value in the token stream parsed as `T`.
+    ///
+    /// Errors if parsing fails. If the next argument is not a positional, it will
+    /// not move forward in the token stream.
+    pub fn check_positional<'a, T: FromStr>(&mut self, p: Positional) -> Result<Option<T>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(CliState::ProcessingPositionals);
+        self.known_args.push(Arg::Positional(p));
+        self.try_positional()
+    }
+
+    /// Forces the next [Positional] to exist from token stream.
+    ///
+    /// Errors if parsing fails or if no unattached argument is left in the token stream.
+    pub fn require_positional<'a, T: FromStr>(&mut self, p: Positional) -> Result<T>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(CliState::ProcessingPositionals);
+        if let Some(value) = self.check_positional(p)? {
+            Ok(value)
+        } else {
+            self.prioritize_help()?;
+            self.is_empty()?;
+            Err(Error::new(
+                self.help.clone(),
+                ErrorKind::MissingPositional,
+                ErrorContext::FailedArg(self.known_args.pop().unwrap()),
+                self.options.cap_mode,
+            ))
+        }
+    }
+
+    /// Forces all the next [Positional] to be captured from the token stream.
+    ///
+    /// Errors if parsing fails or if zero unattached arguments are left in the token stream to begin.
+    ///
+    /// The resulting vector is guaranteed to have `.len() >= 1`.
+    pub fn require_positional_all<'a, T: FromStr>(&mut self, p: Positional) -> Result<Vec<T>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(CliState::ProcessingPositionals);
+        let mut result = Vec::<T>::new();
+        result.push(self.require_positional(p)?);
+        while let Some(v) = self.try_positional()? {
+            result.push(v);
+        }
+        Ok(result)
+    }
+
+    /// Queries for an expected value of `Optional`.
+    pub fn require_option<'a, T: FromStr>(&mut self, o: Optional) -> Result<T>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(CliState::ProcessingOptionals);
+        if let Some(value) = self.check_option(o)? {
+            Ok(value)
+        } else {
+            self.prioritize_help()?;
+            self.is_empty()?;
+            Err(Error::new(
+                self.help.clone(),
+                ErrorKind::MissingOption,
+                ErrorContext::FailedArg(self.known_args.pop().unwrap()),
+                self.options.cap_mode,
+            ))
+        }
+    }
+    /// Queries for a value of `Optional`.
+    ///
+    /// Errors if there are multiple values or if parsing fails.
+    pub fn check_option<'a, T: FromStr>(&mut self, o: Optional) -> Result<Option<T>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(CliState::ProcessingOptionals);
+        // collect information on where the flag can be found
+        let mut locs = self.take_flag_locs(o.get_flag().get_name());
+        if let Some(c) = o.get_flag().get_switch() {
+            locs.extend(self.take_switch_locs(c));
+        }
+        self.known_args.push(Arg::Optional(o));
+        // pull values from where the option flags were found (including switch)
+        let mut values = self.pull_flag(locs, true);
+        match values.len() {
+            1 => {
+                if let Some(word) = values.pop().unwrap() {
+                    let result = word.parse::<T>();
+                    match result {
+                        Ok(r) => Ok(Some(r)),
+                        Err(err) => {
+                            self.prioritize_help()?;
+                            Err(Error::new(
+                                self.help.clone(),
+                                ErrorKind::BadType,
+                                ErrorContext::FailedCast(
+                                    self.known_args.pop().unwrap(),
+                                    word,
+                                    Box::new(err),
+                                ),
+                                self.options.cap_mode,
+                            ))
+                        }
+                    }
+                } else {
+                    self.prioritize_help()?;
+                    Err(Error::new(
+                        self.help.clone(),
+                        ErrorKind::ExpectingValue,
+                        ErrorContext::FailedArg(self.known_args.pop().unwrap()),
+                        self.options.cap_mode,
+                    ))
+                }
+            }
+            0 => Ok(None),
+            _ => {
+                self.prioritize_help()?;
+                Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::DuplicateOptions,
+                    ErrorContext::FailedArg(self.known_args.pop().unwrap()),
+                    self.options.cap_mode,
+                ))
+            }
+        }
+    }
+
+    /// Queries for up to `n` values behind an `Optional`.
+    ///
+    /// Errors if a parsing fails from string or if the number of detected optionals is > n.
+    pub fn check_option_n<'a, T: FromStr>(
+        &mut self,
+        o: Optional,
+        n: usize,
+    ) -> Result<Option<Vec<T>>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(CliState::ProcessingOptionals);
+        let values = self.check_option_all::<T>(o)?;
+        match values {
+            // verify the size of the vector does not exceed `n`
+            Some(r) => match r.len() <= n {
+                true => Ok(Some(r)),
+                false => Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::ExceedingMaxCount,
+                    ErrorContext::ExceededThreshold(self.known_args.pop().unwrap(), r.len(), n),
+                    self.options.cap_mode,
+                )),
+            },
+            None => Ok(None),
+        }
+    }
+
+    /// Queries for all values behind an `Optional`.
+    ///
+    /// Errors if a parsing fails from string.
+    pub fn check_option_all<'a, T: FromStr>(&mut self, o: Optional) -> Result<Option<Vec<T>>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(CliState::ProcessingOptionals);
+        // collect information on where the flag can be found
+        let mut locs = self.take_flag_locs(o.get_flag().get_name());
+        if let Some(c) = o.get_flag().get_switch() {
+            locs.extend(self.take_switch_locs(c));
+        }
+        self.known_args.push(Arg::Optional(o));
+        // pull values from where the option flags were found (including switch)
+        let values = self.pull_flag(locs, true);
+        if values.is_empty() == true {
+            return Ok(None);
+        }
+        // try to convert each value into the type T
+        let mut transform = Vec::<T>::with_capacity(values.len());
+        for val in values {
+            if let Some(word) = val {
+                let result = word.parse::<T>();
+                match result {
+                    Ok(r) => transform.push(r),
+                    Err(err) => {
+                        self.prioritize_help()?;
+                        return Err(Error::new(
+                            self.help.clone(),
+                            ErrorKind::BadType,
+                            ErrorContext::FailedCast(
+                                self.known_args.pop().unwrap(),
+                                word,
+                                Box::new(err),
+                            ),
+                            self.options.cap_mode,
+                        ));
+                    }
+                }
+            } else {
+                self.prioritize_help()?;
+                return Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::ExpectingValue,
+                    ErrorContext::FailedArg(self.known_args.pop().unwrap()),
+                    self.options.cap_mode,
+                ));
+            }
+        }
+        Ok(Some(transform))
+    }
+
+    /// Queries if a flag was raised once and only once.
+    ///
+    /// Errors if the flag has an attached value or was raised multiple times.
+    pub fn check_flag<'a>(&mut self, f: Flag) -> Result<bool> {
+        self.state.proceed(CliState::ProcessingFlags);
+        let occurences = self.check_flag_all(f)?;
+        match occurences > 1 {
+            true => {
+                self.prioritize_help()?;
+                Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::DuplicateOptions,
+                    ErrorContext::FailedArg(self.known_args.pop().unwrap()),
+                    self.options.cap_mode,
+                ))
+            }
+            // the flag was either raised once or not at all
+            false => Ok(occurences == 1),
+        }
+    }
+
+    /// Queries for the number of times a flag was raised.
+    ///
+    /// Errors if the flag has an attached value. Returning a zero indicates the flag was never raised.
+    pub fn check_flag_all<'a>(&mut self, f: Flag) -> Result<usize> {
+        self.state.proceed(CliState::ProcessingFlags);
+        // collect information on where the flag can be found
+        let mut locs = self.take_flag_locs(f.get_name());
+        // try to find the switch locations
+        if let Some(c) = f.get_switch() {
+            locs.extend(self.take_switch_locs(c));
+        };
+        self.known_args.push(Arg::Flag(f));
+        let mut occurences = self.pull_flag(locs, false);
+        // verify there are no values attached to this flag
+        if let Some(val) = occurences.iter_mut().find(|p| p.is_some()) {
+            self.prioritize_help()?;
+            return Err(Error::new(
+                self.help.clone(),
+                ErrorKind::UnexpectedValue,
+                ErrorContext::UnexpectedValue(self.known_args.pop().unwrap(), val.take().unwrap()),
+                self.options.cap_mode,
+            ));
+        } else {
+            let raised = occurences.len() != 0;
+            // check if the user is asking for help by raising the help flag
+            if let Some(hp) = &self.help {
+                if raised == true
+                    && hp.get_flag().get_name()
+                        == self
+                            .known_args
+                            .last()
+                            .unwrap()
+                            .as_flag()
+                            .unwrap()
+                            .get_name()
+                {
+                    self.asking_for_help = true;
+                }
+            }
+            // return the number of times the flag was raised
+            Ok(occurences.len())
+        }
+    }
+
+    /// Queries for the number of times a flag was raised up until `n` times.
+    ///
+    /// Errors if the flag has an attached value. Returning a zero indicates the flag was never raised.
+    pub fn check_flag_n<'a>(&mut self, f: Flag, n: usize) -> Result<usize> {
+        self.state.proceed(CliState::ProcessingFlags);
+        let occurences = self.check_flag_all(f)?;
+        // verify the size of the vector does not exceed `n`
+        match occurences <= n {
+            true => Ok(occurences),
+            false => Err(Error::new(
+                self.help.clone(),
+                ErrorKind::ExceedingMaxCount,
+                ErrorContext::ExceededThreshold(self.known_args.pop().unwrap(), occurences, n),
+                self.options.cap_mode,
+            )),
+        }
+    }
+
+    /// Verifies there are no more tokens remaining in the stream.
+    ///
+    /// Note this mutates the referenced self only if an error is found.
+    pub fn is_empty<'a>(&'a mut self) -> Result<()> {
+        self.state.proceed(CliState::End);
+        self.prioritize_help()?;
+        // check if map is empty, and return the minimum found index.
+        if let Some((prefix, key, _)) = self.capture_bad_flag(self.tokens.len())? {
+            Err(Error::new(
+                self.help.clone(),
+                ErrorKind::UnexpectedArg,
+                ErrorContext::UnexpectedArg(format!("{}{}", prefix, key)),
+                self.options.cap_mode,
+            ))
+        // find first non-none token
+        } else if let Some(t) = self.tokens.iter().find(|p| p.is_some()) {
+            match t {
+                Some(Token::UnattachedArgument(_, word)) => Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::UnexpectedArg,
+                    ErrorContext::UnexpectedArg(word.to_string()),
+                    self.options.cap_mode,
+                )),
+                Some(Token::Terminator(_)) => Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::UnexpectedArg,
+                    ErrorContext::UnexpectedArg(symbol::FLAG.to_string()),
+                    self.options.cap_mode,
+                )),
+                _ => panic!("no other tokens types should be left"),
+            }
+        } else {
+            Ok(())
+        }
+    }
+
     /// Removes the ignored tokens from the stream, if they exist.
     ///
     /// Errors if an `AttachedArg` is found (could only be immediately after terminator)
@@ -1000,51 +1048,25 @@ impl Cli {
                             Arg::Flag(Flag::new("")),
                             tkn.take().unwrap().take_str(),
                         ),
-                        self.cap_mode,
+                        self.options.cap_mode,
                     ))),
                     _ => panic!("no other tokens should exist beyond terminator {:?}", tkn),
                 }
             })
             .collect()
     }
-
-    /// Returns all locations in the token stream where the flag identifier `tag` is found.
-    ///
-    /// Information about Option<Vec<T>> vs. empty Vec<T>: https://users.rust-lang.org/t/space-time-usage-to-construct-vec-t-vs-option-vec-t/35596/6
-    fn take_flag_locs(&mut self, tag: &str) -> Vec<usize> {
-        if let Some(slot) = self.opt_store.get_mut(&Tag::Flag(tag.to_owned())) {
-            slot.visit();
-            slot.get_indices().to_vec()
-        } else {
-            Vec::new()
-        }
-    }
-
-    /// Returns all locations in the token stream where the switch identifier `c` is found.
-    fn take_switch_locs(&mut self, c: &char) -> Vec<usize> {
-        // allocate &str to the stack and not the heap to get from store
-        let mut arr = [0; 4];
-        let tag = c.encode_utf8(&mut arr);
-
-        if let Some(slot) = self.opt_store.get_mut(&Tag::Switch(tag.to_owned())) {
-            slot.visit();
-            slot.get_indices().to_vec()
-        } else {
-            Vec::new()
-        }
-    }
 }
 
-impl Cli {
+impl CliProc {
     /// Glues the interface layer and backend logic for a smooth hand-off of data.
     pub fn go<T: Command>(mut self) -> ExitCode {
-        match T::construct(&mut self) {
+        match T::interpret(&mut self) {
             // construct the application
             Ok(program) => {
                 // verify the cli has no additional arguments if this is the top-level command being parsed
                 match self.is_empty() {
                     Ok(_) => {
-                        let cap_mode = self.cap_mode;
+                        let cap_mode = self.options.cap_mode;
                         std::mem::drop(self);
                         match program.execute() {
                             Ok(_) => ExitCode::from(0),
@@ -1065,7 +1087,7 @@ impl Cli {
                             _ => eprintln!(
                                 "{}: {}",
                                 "error".red().bold(),
-                                error::format_err_msg(err.to_string(), self.cap_mode)
+                                error::format_err_msg(err.to_string(), self.options.cap_mode)
                             ),
                         }
                         ExitCode::from(err.code())
@@ -1079,7 +1101,7 @@ impl Cli {
                     _ => eprintln!(
                         "{}: {}",
                         "error".red().bold(),
-                        error::format_err_msg(err.to_string(), self.cap_mode)
+                        error::format_err_msg(err.to_string(), self.options.cap_mode)
                     ),
                 }
                 ExitCode::from(err.code())
@@ -1445,23 +1467,23 @@ mod test {
             "synthesis",
             "-jto",
         ]));
-        let mut opt_store = HashMap::<Tag<String>, Slot>::new();
+        let mut store = HashMap::<Tag<String>, Slot>::new();
         // store long options
-        opt_store.insert(
+        store.insert(
             Tag::Flag("help".to_string()),
             Slot {
                 pointers: vec![0, 7],
                 visited: false,
             },
         );
-        opt_store.insert(
+        store.insert(
             Tag::Flag("lib".to_string()),
             Slot {
                 pointers: vec![4],
                 visited: false,
             },
         );
-        opt_store.insert(
+        store.insert(
             Tag::Flag("name".to_string()),
             Slot {
                 pointers: vec![5],
@@ -1469,35 +1491,35 @@ mod test {
             },
         );
         // stores switches too
-        opt_store.insert(
+        store.insert(
             Tag::Switch("v".to_string()),
             Slot {
                 pointers: vec![1],
                 visited: false,
             },
         );
-        opt_store.insert(
+        store.insert(
             Tag::Switch("s".to_string()),
             Slot {
                 pointers: vec![8],
                 visited: false,
             },
         );
-        opt_store.insert(
+        store.insert(
             Tag::Switch("c".to_string()),
             Slot {
                 pointers: vec![9],
                 visited: false,
             },
         );
-        opt_store.insert(
+        store.insert(
             Tag::Switch("i".to_string()),
             Slot {
                 pointers: vec![10],
                 visited: false,
             },
         );
-        assert_eq!(cli.opt_store, opt_store);
+        assert_eq!(cli.store, store);
     }
 
     #[test]
