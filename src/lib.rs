@@ -8,7 +8,7 @@ pub mod proc;
 
 pub use arg::{Flag, Optional, Positional};
 pub use cli::Cli;
-pub use cli::CliProc;
+pub use cli::Memory;
 pub use help::Help;
 pub use proc::{Command, Subcommand};
 pub use std::process::ExitCode;
@@ -17,7 +17,6 @@ pub use std::process::ExitCode;
 mod tests {
     use super::*;
     use crate::arg::{Flag, Positional};
-    use crate::cli::CliProc;
 
     /// Helper test `fn` to write vec of &str as iterator for Cli parameter.
     fn args<'a>(args: Vec<&'a str>) -> Box<dyn Iterator<Item = String> + 'a> {
@@ -44,7 +43,7 @@ mod tests {
             }
 
             impl Command for Add {
-                fn interpret(cli: &mut CliProc) -> cli::Result<Self> {
+                fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
                     // set help text in case of an error
                     cli.check_help(Help::default().text(String::new()))?;
                     let radd = Add {
@@ -70,7 +69,10 @@ mod tests {
 
             #[test]
             fn it_add_program() {
-                let mut cli = Cli::new().threshold(4).parse(args(vec!["add", "45", "17"]));
+                let mut cli = Cli::new()
+                    .threshold(4)
+                    .parse(args(vec!["add", "45", "17"]))
+                    .save();
                 let program = Add::interpret(&mut cli).unwrap();
                 std::mem::drop(cli);
                 assert_eq!(program.run(), 62);
@@ -94,7 +96,7 @@ mod tests {
             }
 
             impl Command for Add {
-                fn interpret(cli: &mut CliProc) -> cli::Result<Self> {
+                fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
                     // set help text in case of an error
                     cli.check_help(Help::default().text(String::new()))?;
                     let radd = Add {
@@ -121,7 +123,10 @@ mod tests {
             #[test]
             #[should_panic]
             fn it_add_program() {
-                let mut cli = Cli::new().threshold(4).parse(args(vec!["add", "45", "17"]));
+                let mut cli = Cli::new()
+                    .threshold(4)
+                    .parse(args(vec!["add", "45", "17"]))
+                    .save();
                 let _ = Add::interpret(&mut cli);
             }
         }
