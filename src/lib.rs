@@ -7,8 +7,8 @@ pub mod cli;
 pub mod proc;
 
 pub use arg::{Flag, Optional, Positional};
+pub use cli::states::{Block, Compose, Memory};
 pub use cli::Cli;
-pub use cli::Memory;
 pub use help::Help;
 pub use proc::{Command, Subcommand};
 pub use std::process::ExitCode;

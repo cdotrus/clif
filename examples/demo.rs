@@ -15,7 +15,7 @@ impl Command for Demo {
         cli.check_help(Help::default().text(HELP))?;
         Ok(Demo {
             name: cli.require_option(Optional::new("name").switch('n'))?,
-            count: cli.check_option(Optional::new("count").switch('c'))?,
+            count: cli.get_option(Optional::new("count").switch('c'))?,
         })
     }
 

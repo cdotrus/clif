@@ -1,5 +1,5 @@
 use crate::cli;
-use crate::cli::{Cli, Memory};
+use crate::cli::{states::Memory, Cli};
 
 /// The return type for a [Command]'s execution process.
 pub type Result = std::result::Result<(), Box<dyn std::error::Error>>;
@@ -114,7 +114,7 @@ mod test {
             let m = Ok(Op {
                 force: cli.check_flag(Flag::new("force"))?,
                 version: cli.check_flag(Flag::new("version"))?,
-                command: cli.check_command(Positional::new("subcommand"))?,
+                command: cli.get_subcommand(Positional::new("subcommand"))?,
             });
             cli.is_empty()?;
             m
@@ -136,7 +136,7 @@ mod test {
 
     impl Subcommand<()> for OpSubcommand {
         fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
-            match cli.match_command(&["add", "mult", "sub"])?.as_ref() {
+            match cli.match_subcommand(&["add", "mult", "sub"])?.as_ref() {
                 "add" => Ok(OpSubcommand::Add(Add::interpret(cli)?)),
                 _ => panic!("an unimplemented command was passed through!"),
             }
