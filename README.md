@@ -28,12 +28,12 @@ At the ready stage, the processor has two choices: _go_ or _save_:
 
 - `save()` puts off command interpretations and execution by only transitioning the processor to the memory stage. This allows the programmer to expliticly handle calling the specified struct as a command.
 
-The raw vector of strings received from the command-line is processed by translating the strings into tokens to be interpreted by a struct implementing the `Command` trait.
-
 ### Commands
 
+The raw vector of strings received from the command-line is processed by translating the strings into tokens to be interpreted by a struct implementing the `Command` trait.
+
 Any struct can be function as a command/subcommand as along as:
-1. Each internal attribute's type implements the standard library's [`std::str::FromStr`](https://doc.rust-lang.org/std/str/trait.FromStr.html) trait.
+1. Each field's type in the struct implements the standard library's [`std::str::FromStr`](https://doc.rust-lang.org/std/str/trait.FromStr.html) trait.
 2. The struct implements `cliproc`'s [`Command`](./src/proc.rs) (or [`Subcommand`](./src/proc.rs)) trait.
 
 ### Arguments
