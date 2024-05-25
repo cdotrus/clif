@@ -28,7 +28,7 @@ impl Command for Demo {
     }
 }
 
-// 3. Parse the command-line arguments and run the command
+// 3. Build the command-line processor and run the command
 fn main() -> ExitCode {
     Cli::default().parse(env::args()).go::<Demo>()
 }

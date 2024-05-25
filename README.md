@@ -11,11 +11,32 @@ cliproc = "1.0.0"
 
 ## Details
 
+The command-line processor is divided into 3 stages: _build_, _ready_, and _memory_. It is implemented using the typestate pattern to enforce valid state operations and state transitions at compile-time.
+
+1. _Build Stage_: The build stage provides methods to configure the command-line processor. This stage uses the builder pattern to set options.
+
+2. _Ready Stage_: The ready stage provides methods to determine how to run the command-line processor.
+
+3. _Memory Stage_: The memory stage provides methods to handle requests for data that is available from the command-line. This stage is the final stage of the command-line processor.
+
+### Transitions
+
+Parsing a set of arguments using `parse(...)` transitions the command-line processor from the build stage to the ready stage.
+
+At the ready stage, the processor has two choices: _go_ or _save_:
+- `go()` runs the processor to completion by transitioning to the memory stage and then handling calling the specified struct as a command with its implementation of the `Command` trait. This is the recommended choice for running the processor.
+
+- `save()` puts off command interpretations and execution by only transitioning the processor to the memory stage. This allows the programmer to expliticly handle calling the specified struct as a command.
+
 The raw vector of strings received from the command-line is processed by translating the strings into tokens to be interpreted by a struct implementing the `Command` trait.
 
-Any struct can be function as a command as along as:
+### Commands
+
+Any struct can be function as a command/subcommand as along as:
 1. Each internal attribute's type implements the standard library's [`std::str::FromStr`](https://doc.rust-lang.org/std/str/trait.FromStr.html) trait.
-2. The struct implements `cliproc`'s [`Command`](./src/proc.rs) trait.
+2. The struct implements `cliproc`'s [`Command`](./src/proc.rs) (or [`Subcommand`](./src/proc.rs)) trait.
+
+### Arguments
 
 There are 4 supported types of arguments recognized by `cliproc`:
 - _Flags_: boolean conditions (ex: `--verbose`)
@@ -83,7 +104,7 @@ The command-line processor has the ability to:
 
 ``` rust
 use cliproc::{cli, proc};
-use cliproc::{Cli, Command, ExitCode, Help, Optional};
+use cliproc::{Cli, Command, ExitCode, Help, Memory, Optional};
 use std::env;
 
 // 1. Define the struct and the data required to perform its task
@@ -95,11 +116,11 @@ struct Demo {
 // 2. Implement the `Command` trait to allow a struct to function as a command
 impl Command for Demo {
     // 2a. Map the command-line data to the struct's data
-    fn construct(cli: &mut Cli) -> cli::Result<Self> {
+    fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
         cli.check_help(Help::default().text(HELP))?;
         Ok(Demo {
             name: cli.require_option(Optional::new("name").switch('n'))?,
-            count: cli.check_option(Optional::new("count").switch('c'))?,
+            count: cli.get_option(Optional::new("count").switch('c'))?,
         })
     }
 
@@ -112,7 +133,7 @@ impl Command for Demo {
     }
 }
 
-// 3. Parse the command-line arguments and run the command
+// 3. Build the command-line processor and run the command
 fn main() -> ExitCode {
     Cli::default().parse(env::args()).go::<Demo>()
 }
