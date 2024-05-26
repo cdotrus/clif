@@ -6,7 +6,7 @@ mod seqalin;
 pub mod cli;
 pub mod proc;
 
-pub use arg::{Arg, Flag, Optional, Positional};
+pub use arg::Arg;
 pub use cli::states::{Build, Memory, Ready};
 pub use cli::Cli;
 pub use help::Help;
