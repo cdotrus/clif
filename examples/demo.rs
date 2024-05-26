@@ -1,5 +1,5 @@
 use cliproc::{cli, proc};
-use cliproc::{Cli, Command, ExitCode, Help, Memory, Optional};
+use cliproc::{Arg, Cli, Command, ExitCode, Help, Memory};
 use std::env;
 
 // 1. Define the struct and the data required to perform its task
@@ -12,10 +12,10 @@ struct Demo {
 impl Command for Demo {
     // 2a. Map the command-line data to the struct's data
     fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
-        cli.check_help(Help::default().text(HELP))?;
+        cli.help(Help::default().text(HELP))?;
         Ok(Demo {
-            name: cli.require_option(Optional::new("name").switch('n'))?,
-            count: cli.get_option(Optional::new("count").switch('c'))?,
+            name: cli.require(Arg::option("name").switch('n'))?,
+            count: cli.get(Arg::option("count").switch('c'))?,
         })
     }
 

@@ -1,5 +1,78 @@
 use std::fmt::Debug;
 use std::fmt::Display;
+use std::marker::PhantomData;
+
+pub struct Raisable {}
+pub struct Valuable {}
+
+pub trait ArgState {}
+
+impl ArgState for Raisable {}
+impl ArgState for Valuable {}
+
+#[derive(PartialEq)]
+pub struct Arg<S: ArgState> {
+    data: ArgType,
+    _marker: PhantomData<S>,
+}
+
+pub fn into_data<S: ArgState>(arg: Arg<S>) -> ArgType {
+    arg.data
+}
+
+impl Arg<Raisable> {
+    pub fn flag<T: AsRef<str>>(s: T) -> Arg<Raisable> {
+        Self {
+            data: ArgType::Flag(Flag::new(s.as_ref().to_string())),
+            _marker: PhantomData::<Raisable>,
+        }
+    }
+
+    pub fn switch(self, c: char) -> Self {
+        Self {
+            data: ArgType::Flag(self.data.into_flag().unwrap().switch(c)),
+            _marker: PhantomData::<Raisable>,
+        }
+    }
+}
+
+impl Arg<Valuable> {
+    pub fn option<T: AsRef<str>>(name: T) -> Arg<Valuable> {
+        Self {
+            data: ArgType::Optional(Optional::new(name)),
+            _marker: PhantomData::<Valuable>,
+        }
+    }
+
+    pub fn positional<T: AsRef<str>>(name: T) -> Arg<Valuable> {
+        Self {
+            data: ArgType::Positional(Positional::new(name)),
+            _marker: PhantomData::<Valuable>,
+        }
+    }
+
+    pub fn value<T: AsRef<str>>(self, s: T) -> Self {
+        Self {
+            data: match self.data.is_option() {
+                true => ArgType::Optional(self.data.into_option().unwrap().value(s)),
+                false => self.data,
+            },
+            _marker: self._marker,
+        }
+    }
+
+    pub fn switch(self, c: char) -> Arg<Valuable> {
+        Self {
+            data: match self.data.is_option() {
+                true => ArgType::Optional(self.data.into_option().unwrap().switch(c)),
+                false => self.data,
+            },
+            _marker: self._marker,
+        }
+    }
+}
+
+pub trait HoldsValue: Sized {}
 
 mod symbol {
     pub const FLAG: &str = "--";
@@ -8,33 +81,72 @@ mod symbol {
 }
 
 #[derive(PartialEq)]
-pub enum Arg {
+pub enum ArgType {
     Flag(Flag),
     Positional(Positional),
     Optional(Optional),
 }
 
-impl Arg {
+impl ArgType {
     pub fn as_flag(&self) -> Option<&Flag> {
         match self {
-            Arg::Flag(f) => Some(f),
-            Arg::Optional(o) => Some(o.get_flag()),
-            Arg::Positional(_) => None,
+            ArgType::Flag(f) => Some(f),
+            ArgType::Optional(o) => Some(o.get_flag()),
+            ArgType::Positional(_) => None,
+        }
+    }
+
+    pub fn as_option(&self) -> Option<&Optional> {
+        match self {
+            ArgType::Flag(_) => None,
+            ArgType::Optional(o) => Some(o),
+            ArgType::Positional(_) => None,
+        }
+    }
+
+    fn is_option(&self) -> bool {
+        match self {
+            Self::Optional(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn into_option(self) -> Option<Optional> {
+        match self {
+            ArgType::Flag(_) => None,
+            ArgType::Optional(o) => Some(o),
+            ArgType::Positional(_) => None,
+        }
+    }
+
+    pub fn into_flag(self) -> Option<Flag> {
+        match self {
+            ArgType::Flag(f) => Some(f),
+            ArgType::Optional(_) => None,
+            ArgType::Positional(_) => None,
+        }
+    }
+
+    pub fn into_positional(self) -> Option<Positional> {
+        match self {
+            ArgType::Flag(_) => None,
+            ArgType::Optional(_) => None,
+            ArgType::Positional(p) => Some(p),
         }
     }
 }
 
-impl Display for Arg {
+impl Display for ArgType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
-            Arg::Flag(a) => write!(f, "{}", a),
-            Arg::Positional(a) => write!(f, "{}", a),
-            Arg::Optional(a) => write!(f, "{}", a),
+            ArgType::Flag(a) => write!(f, "{}", a),
+            ArgType::Positional(a) => write!(f, "{}", a),
+            ArgType::Optional(a) => write!(f, "{}", a),
         }
     }
 }
 
-impl Debug for Arg {
+impl Debug for ArgType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "'{}'", self.to_string())
     }
@@ -253,15 +365,15 @@ mod test {
 
     #[test]
     fn arg_disp() {
-        let command = Arg::Positional(Positional::new("command"));
+        let command = ArgType::Positional(Positional::new("command"));
         assert_eq!(command.to_string(), "<command>");
 
-        let help = Arg::Flag(Flag::new("help"));
+        let help = ArgType::Flag(Flag::new("help"));
         assert_eq!(help.to_string(), "--help");
 
         assert_eq!(help.as_flag().unwrap().to_string(), "--help");
 
-        let color = Arg::Optional(Optional::new("color").value("rgb"));
+        let color = ArgType::Optional(Optional::new("color").value("rgb"));
         assert_eq!(color.to_string(), "--color <rgb>");
 
         assert_eq!(color.as_flag().unwrap().get_name(), "color");
@@ -269,7 +381,7 @@ mod test {
 
     #[test]
     fn arg_impossible_pos_as_flag() {
-        let command = Arg::Positional(Positional::new("command"));
+        let command = ArgType::Positional(Positional::new("command"));
         assert_eq!(command.as_flag(), None);
     }
 }

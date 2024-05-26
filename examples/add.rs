@@ -4,8 +4,8 @@ use std::fmt::Display;
 
 use cliproc::cli;
 use cliproc::proc;
+use cliproc::{Arg, Help};
 use cliproc::{Cli, Command, Memory};
-use cliproc::{Flag, Help, Positional};
 
 use std::process::ExitCode;
 
@@ -41,11 +41,11 @@ impl Error for AddError {}
 
 impl Command for Add {
     fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
-        cli.check_help(Help::default().text(HELP))?;
+        cli.help(Help::default().text(HELP))?;
         Ok(Add {
-            verbose: cli.check_flag(Flag::new("verbose"))?,
-            left: cli.require_positional(Positional::new("left"))?,
-            right: cli.require_positional(Positional::new("right"))?,
+            verbose: cli.check(Arg::flag("verbose"))?,
+            left: cli.require(Arg::positional("left"))?,
+            right: cli.require(Arg::positional("right"))?,
         })
     }
 

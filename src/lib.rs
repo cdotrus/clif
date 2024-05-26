@@ -6,7 +6,7 @@ mod seqalin;
 pub mod cli;
 pub mod proc;
 
-pub use arg::{Flag, Optional, Positional};
+pub use arg::{Arg, Flag, Optional, Positional};
 pub use cli::states::{Build, Memory, Ready};
 pub use cli::Cli;
 pub use help::Help;
@@ -16,7 +16,6 @@ pub use std::process::ExitCode;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::arg::{Flag, Positional};
 
     /// Helper test `fn` to write vec of &str as iterator for Cli parameter.
     fn args<'a>(args: Vec<&'a str>) -> Box<dyn Iterator<Item = String> + 'a> {
@@ -45,11 +44,11 @@ mod tests {
             impl Command for Add {
                 fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
                     // set help text in case of an error
-                    cli.check_help(Help::default().text(String::new()))?;
+                    cli.help(Help::default().text(String::new()))?;
                     let radd = Add {
-                        verbose: cli.check_flag(Flag::new("verbose"))?,
-                        lhs: cli.require_positional(Positional::new("lhs"))?,
-                        rhs: cli.require_positional(Positional::new("rhs"))?,
+                        verbose: cli.check(Arg::flag("verbose"))?,
+                        lhs: cli.require(Arg::positional("lhs"))?,
+                        rhs: cli.require(Arg::positional("rhs"))?,
                     };
                     // optional: verify the cli has no additional arguments if this is the top-level command being parsed
                     cli.is_empty()?;
@@ -98,11 +97,11 @@ mod tests {
             impl Command for Add {
                 fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
                     // set help text in case of an error
-                    cli.check_help(Help::default().text(String::new()))?;
+                    cli.help(Help::default().text(String::new()))?;
                     let radd = Add {
-                        lhs: cli.require_positional(Positional::new("lhs"))?,
-                        verbose: cli.check_flag(Flag::new("verbose"))?,
-                        rhs: cli.require_positional(Positional::new("rhs"))?,
+                        lhs: cli.require(Arg::positional("lhs"))?,
+                        verbose: cli.check(Arg::flag("verbose"))?,
+                        rhs: cli.require(Arg::positional("rhs"))?,
                     };
                     // optional: verify the cli has no additional arguments if this is the top-level command being parsed
                     cli.is_empty()?;

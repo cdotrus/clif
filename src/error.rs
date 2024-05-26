@@ -1,4 +1,4 @@
-use crate::arg::Arg;
+use crate::arg::ArgType;
 use crate::help::Help;
 use colored::Colorize;
 use std::fmt::Display;
@@ -111,14 +111,14 @@ impl Error {
 #[derive(Debug)]
 #[allow(dead_code)]
 pub enum ErrorContext {
-    ExceededThreshold(Arg, CurCount, MaxCount),
-    FailedArg(Arg),
-    UnexpectedValue(Arg, Value),
-    FailedCast(Arg, Value, SomeError),
+    ExceededThreshold(ArgType, CurCount, MaxCount),
+    FailedArg(ArgType),
+    UnexpectedValue(ArgType, Value),
+    FailedCast(ArgType, Value, SomeError),
     OutofContextArgSuggest(Argument, Subcommand),
     UnexpectedArg(Argument),
     SuggestWord(String, Suggestion),
-    UnknownSubcommand(Arg, Subcommand),
+    UnknownSubcommand(ArgType, Subcommand),
     CustomRule(SomeError),
     Help,
 }

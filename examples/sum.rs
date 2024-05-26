@@ -1,8 +1,8 @@
 use std::env;
 
 use cliproc::{cli, proc};
+use cliproc::{Arg, Help};
 use cliproc::{Cli, Command, ExitCode, Memory};
-use cliproc::{Flag, Help, Positional};
 
 fn main() -> ExitCode {
     Cli::default().parse(env::args()).go::<Sum>()
@@ -28,10 +28,10 @@ impl Sum {
 impl Command for Sum {
     fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
         // set short help text in case of an error
-        cli.check_help(Help::default().text(HELP))?;
+        cli.help(Help::default().text(HELP))?;
         Ok(Sum {
-            verbose: cli.check_flag(Flag::new("verbose"))?,
-            nums: cli.require_positional_all(Positional::new("num"))?,
+            verbose: cli.check(Arg::flag("verbose"))?,
+            nums: cli.require_all(Arg::positional("num"))?,
         })
     }
 

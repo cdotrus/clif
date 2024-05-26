@@ -73,14 +73,14 @@ mod test {
 
     impl Subcommand<()> for Add {
         fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
-            cli.check_help(Help::new().text("Usage: add <lhs> <rhs> [--verbose]"))?;
+            cli.help(Help::new().text("Usage: add <lhs> <rhs> [--verbose]"))?;
             // the ability to "learn options" beforehand is possible, or can be skipped
             // "learn options" here (take in known args (as ref?))
             Ok(Add {
-                force: cli.check_flag(Flag::new("force"))?,
-                verbose: cli.check_flag(Flag::new("verbose"))?,
-                lhs: cli.require_positional(Positional::new("lhs"))?,
-                rhs: cli.require_positional(Positional::new("rhs"))?,
+                force: cli.check(Arg::flag("force"))?,
+                verbose: cli.check(Arg::flag("verbose"))?,
+                lhs: cli.require(Arg::positional("lhs"))?,
+                rhs: cli.require(Arg::positional("rhs"))?,
             })
         }
 
@@ -112,9 +112,9 @@ mod test {
     impl Command for Op {
         fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
             let m = Ok(Op {
-                force: cli.check_flag(Flag::new("force"))?,
-                version: cli.check_flag(Flag::new("version"))?,
-                command: cli.get_subcommand(Positional::new("subcommand"))?,
+                force: cli.check(Arg::flag("force"))?,
+                version: cli.check(Arg::flag("version"))?,
+                command: cli.sub_get("subcommand")?,
             });
             cli.is_empty()?;
             m
@@ -136,7 +136,7 @@ mod test {
 
     impl Subcommand<()> for OpSubcommand {
         fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
-            match cli.match_subcommand(&["add", "mult", "sub"])?.as_ref() {
+            match cli.sub_match(&["add", "mult", "sub"])?.as_ref() {
                 "add" => Ok(OpSubcommand::Add(Add::interpret(cli)?)),
                 _ => panic!("an unimplemented command was passed through!"),
             }

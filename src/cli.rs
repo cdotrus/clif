@@ -199,7 +199,7 @@ pub struct Cli<S: ProcessorState> {
     /// A lookup table for identifying which positions in the token stream a given option is present
     store: HashMap<Tag<String>, Slot>,
     /// The list of arguments has they are processed by the Cli processor
-    known_args: Vec<Arg>,
+    known_args: Vec<ArgType>,
     asking_for_help: bool,
     help: Option<Help>,
     state: MemoryState,
@@ -444,148 +444,67 @@ impl Cli<Ready> {
     }
 }
 
-// Public API
+// Private API
+
 impl Cli<Memory> {
-    /// Sets the [Help] attribute to display and checks if help has already been raised in the token stream.
-    ///
-    /// This function returns whether or not help has been asked for by checking
-    /// for [Help] as a flag on the command-line only if helping is enabled.
-    pub fn check_help(&mut self, help: Help) -> Result<bool> {
-        self.help = Some(help);
-        // check for flag if not already raised
-        if self.asking_for_help == false && self.is_help_enabled() == true {
-            self.asking_for_help =
-                self.check_flag(self.help.as_ref().unwrap().get_flag().clone())?;
-        }
-        Ok(self.asking_for_help)
-    }
-
-    /// Clears the `asking_for_help` status flag.
-    pub fn clear_help(&mut self) -> () {
-        self.asking_for_help = false;
-    }
-
-    /// Directly calls the help error if asking for help is enabled.
-    pub fn raise_help(&self) -> Result<()> {
-        self.try_to_help()
-    }
-
-    /// Removes the current help text set for the command-line argument parser.
-    pub fn disable_help(&mut self) -> () {
-        self.help = None;
-    }
-
-    /// Determines if an `UnattachedArg` exists to be served as a subcommand.
-    ///
-    /// If so, it will call `from_cli` on the type defined. If not, it will return none.
-    pub fn get_subcommand<'a, T: Subcommand<U>, U>(&mut self, p: Positional) -> Result<Option<T>> {
-        self.known_args.push(Arg::Positional(p));
-        // check but do not remove if an unattached arg exists
-        let command_exists = self
-            .tokens
-            .iter()
-            .find(|f| match f {
-                Some(Token::UnattachedArgument(_, _)) => true,
-                _ => false,
-            })
-            .is_some();
-        if command_exists == true {
-            // reset the parser state upon entering new subcommand
-            self.state = MemoryState::reset();
-            let sub = Some(T::interpret(self)?);
-            self.state.proceed(MemoryState::ProcessingSubcommands);
-            Ok(sub)
-        } else {
-            self.state.proceed(MemoryState::ProcessingSubcommands);
-            return Ok(None);
-        }
-    }
-
-    /// Tries to match the next `UnattachedArg` with a list of given `words`.
-    ///
-    /// If fails, it will attempt to offer a spelling suggestion if the name is close.
-    ///
-    /// Panics if there is not a next `UnattachedArg`. It is recommended to not directly call
-    /// this command, but through a `from_cli` call after `check_command` has been issued.
-    pub fn match_subcommand<T: AsRef<str> + std::cmp::PartialEq>(
-        &mut self,
-        words: &[T],
-    ) -> Result<String> {
-        // find the unattached arg's index before it is removed from the token stream
-        let i: usize = self
-            .tokens
-            .iter()
-            .find_map(|f| match f {
-                Some(Token::UnattachedArgument(i, _)) => Some(*i),
-                _ => None,
-            })
-            .expect("an unattached argument must exist before calling `match_subcommand`");
-        let command = self
-            .next_uarg()
-            .expect("`get_subcommand` must be called before this function");
-
-        // perform partial clean to ensure no arguments are remaining behind the command (uncaught options)
-        let ooc_arg = self.capture_bad_flag(i)?;
-
-        if words.iter().find(|p| p.as_ref() == command).is_some() {
-            if let Some((prefix, key, pos)) = ooc_arg {
-                if pos < i {
-                    self.try_to_help()?;
-                    return Err(Error::new(
-                        self.help.clone(),
-                        ErrorKind::OutOfContextArgSuggest,
-                        ErrorContext::OutofContextArgSuggest(format!("{}{}", prefix, key), command),
-                        self.options.cap_mode,
-                    ));
-                }
-            }
-            Ok(command)
-        // try to offer a spelling suggestion otherwise say we've hit an unexpected argument
-        } else {
-            // bypass sequence alignment algorithm if threshold == 0
-            if let Some(w) = if self.options.threshold > 0 {
-                seqalin::sel_min_edit_str(&command, &words, self.options.threshold)
-            } else {
-                None
-            } {
-                Err(Error::new(
-                    self.help.clone(),
-                    ErrorKind::SuggestSubcommand,
-                    ErrorContext::SuggestWord(command, w.to_string()),
-                    self.options.cap_mode,
-                ))
-            } else {
-                self.try_to_help()?;
-                Err(Error::new(
-                    self.help.clone(),
-                    ErrorKind::UnknownSubcommand,
-                    ErrorContext::UnknownSubcommand(
-                        self.known_args.pop().expect("requires positional argument"),
-                        command,
-                    ),
-                    self.options.cap_mode,
-                ))
-            }
-        }
-    }
-
     /// Serves the next `Positional` value in the token stream parsed as `T`.
     ///
     /// Errors if parsing fails. If the next argument is not a positional, it will
     /// not move forward in the token stream.
-    pub fn get_positional<'a, T: FromStr>(&mut self, p: Positional) -> Result<Option<T>>
+    fn get_positional<'a, T: FromStr>(&mut self, p: Positional) -> Result<Option<T>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
         self.state.proceed(MemoryState::ProcessingPositionals);
-        self.known_args.push(Arg::Positional(p));
+        self.known_args.push(ArgType::Positional(p));
         self.try_positional()
+    }
+
+    fn get_positional_all<'a, T: FromStr>(&mut self, p: Positional) -> Result<Option<Vec<T>>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(MemoryState::ProcessingPositionals);
+        let mut result = Vec::<T>::new();
+        match self.get_positional(p)? {
+            Some(item) => result.push(item),
+            None => return Ok(None),
+        }
+        while let Some(v) = self.try_positional()? {
+            result.push(v);
+        }
+        Ok(Some(result))
+    }
+
+    fn get_positional_until<'a, T: FromStr>(
+        &mut self,
+        p: Positional,
+        limit: usize,
+    ) -> Result<Option<Vec<T>>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(MemoryState::ProcessingPositionals);
+        let values = self.get_positional_all::<T>(p)?;
+        match values {
+            // verify the size of the vector does not exceed `n`
+            Some(r) => match r.len() <= limit {
+                true => Ok(Some(r)),
+                false => Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::ExceedingMaxCount,
+                    ErrorContext::ExceededThreshold(self.known_args.pop().unwrap(), r.len(), limit),
+                    self.options.cap_mode,
+                )),
+            },
+            None => Ok(None),
+        }
     }
 
     /// Forces the next [Positional] to exist from token stream.
     ///
     /// Errors if parsing fails or if no unattached argument is left in the token stream.
-    pub fn require_positional<'a, T: FromStr>(&mut self, p: Positional) -> Result<T>
+    fn require_positional<'a, T: FromStr>(&mut self, p: Positional) -> Result<T>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
@@ -609,7 +528,7 @@ impl Cli<Memory> {
     /// Errors if parsing fails or if zero unattached arguments are left in the token stream to begin.
     ///
     /// The resulting vector is guaranteed to have `.len() >= 1`.
-    pub fn require_positional_all<'a, T: FromStr>(&mut self, p: Positional) -> Result<Vec<T>>
+    fn require_positional_all<'a, T: FromStr>(&mut self, p: Positional) -> Result<Vec<T>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
@@ -622,29 +541,36 @@ impl Cli<Memory> {
         Ok(result)
     }
 
-    /// Queries for an expected value of `Optional`.
-    pub fn require_option<'a, T: FromStr>(&mut self, o: Optional) -> Result<T>
+    fn require_positional_until<'a, T: FromStr>(
+        &mut self,
+        p: Positional,
+        limit: usize,
+    ) -> Result<Vec<T>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
-        self.state.proceed(MemoryState::ProcessingOptionals);
-        if let Some(value) = self.get_option(o)? {
-            Ok(value)
-        } else {
-            self.try_to_help()?;
-            self.is_empty()?;
-            Err(Error::new(
+        self.state.proceed(MemoryState::ProcessingPositionals);
+        let values = self.require_positional_all(p)?;
+        // verify the size of the vector does not exceed `n`
+        match values.len() <= limit {
+            true => Ok(values),
+            false => Err(Error::new(
                 self.help.clone(),
-                ErrorKind::MissingOption,
-                ErrorContext::FailedArg(self.known_args.pop().unwrap()),
+                ErrorKind::ExceedingMaxCount,
+                ErrorContext::ExceededThreshold(
+                    self.known_args.pop().unwrap(),
+                    values.len(),
+                    limit,
+                ),
                 self.options.cap_mode,
-            ))
+            )),
         }
     }
+
     /// Queries for a value of `Optional`.
     ///
     /// Errors if there are multiple values or if parsing fails.
-    pub fn get_option<'a, T: FromStr>(&mut self, o: Optional) -> Result<Option<T>>
+    fn get_option<'a, T: FromStr>(&mut self, o: Optional) -> Result<Option<T>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
@@ -654,7 +580,7 @@ impl Cli<Memory> {
         if let Some(c) = o.get_flag().get_switch() {
             locs.extend(self.take_switch_locs(c));
         }
-        self.known_args.push(Arg::Optional(o));
+        self.known_args.push(ArgType::Optional(o));
         // pull values from where the option flags were found (including switch)
         let mut values = self.pull_flag(locs, true);
         match values.len() {
@@ -700,38 +626,10 @@ impl Cli<Memory> {
         }
     }
 
-    /// Queries for up to `n` values behind an `Optional`.
-    ///
-    /// Errors if a parsing fails from string or if the number of detected optionals is > n.
-    pub fn get_option_until<'a, T: FromStr>(
-        &mut self,
-        o: Optional,
-        limit: usize,
-    ) -> Result<Option<Vec<T>>>
-    where
-        <T as FromStr>::Err: 'static + std::error::Error,
-    {
-        self.state.proceed(MemoryState::ProcessingOptionals);
-        let values = self.get_option_all::<T>(o)?;
-        match values {
-            // verify the size of the vector does not exceed `n`
-            Some(r) => match r.len() <= limit {
-                true => Ok(Some(r)),
-                false => Err(Error::new(
-                    self.help.clone(),
-                    ErrorKind::ExceedingMaxCount,
-                    ErrorContext::ExceededThreshold(self.known_args.pop().unwrap(), r.len(), limit),
-                    self.options.cap_mode,
-                )),
-            },
-            None => Ok(None),
-        }
-    }
-
     /// Queries for all values behind an `Optional`.
     ///
     /// Errors if a parsing fails from string.
-    pub fn get_option_all<'a, T: FromStr>(&mut self, o: Optional) -> Result<Option<Vec<T>>>
+    fn get_option_all<'a, T: FromStr>(&mut self, o: Optional) -> Result<Option<Vec<T>>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
@@ -741,7 +639,7 @@ impl Cli<Memory> {
         if let Some(c) = o.get_flag().get_switch() {
             locs.extend(self.take_switch_locs(c));
         }
-        self.known_args.push(Arg::Optional(o));
+        self.known_args.push(ArgType::Optional(o));
         // pull values from where the option flags were found (including switch)
         let values = self.pull_flag(locs, true);
         if values.is_empty() == true {
@@ -781,10 +679,99 @@ impl Cli<Memory> {
         Ok(Some(transform))
     }
 
+    /// Queries for up to `n` values behind an `Optional`.
+    ///
+    /// Errors if a parsing fails from string or if the number of detected optionals is > n.
+    fn get_option_until<'a, T: FromStr>(
+        &mut self,
+        o: Optional,
+        limit: usize,
+    ) -> Result<Option<Vec<T>>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(MemoryState::ProcessingOptionals);
+        let values = self.get_option_all::<T>(o)?;
+        match values {
+            // verify the size of the vector does not exceed `n`
+            Some(r) => match r.len() <= limit {
+                true => Ok(Some(r)),
+                false => Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::ExceedingMaxCount,
+                    ErrorContext::ExceededThreshold(self.known_args.pop().unwrap(), r.len(), limit),
+                    self.options.cap_mode,
+                )),
+            },
+            None => Ok(None),
+        }
+    }
+
+    /// Queries for an expected value of `Optional`.
+    fn require_option<'a, T: FromStr>(&mut self, o: Optional) -> Result<T>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(MemoryState::ProcessingOptionals);
+        if let Some(value) = self.get_option(o)? {
+            Ok(value)
+        } else {
+            self.try_to_help()?;
+            self.is_empty()?;
+            Err(Error::new(
+                self.help.clone(),
+                ErrorKind::MissingOption,
+                ErrorContext::FailedArg(self.known_args.pop().unwrap()),
+                self.options.cap_mode,
+            ))
+        }
+    }
+
+    fn require_option_all<'a, T: FromStr>(&mut self, o: Optional) -> Result<Vec<T>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(MemoryState::ProcessingOptionals);
+        if let Some(value) = self.get_option_all(o)? {
+            Ok(value)
+        } else {
+            self.try_to_help()?;
+            self.is_empty()?;
+            Err(Error::new(
+                self.help.clone(),
+                ErrorKind::MissingOption,
+                ErrorContext::FailedArg(self.known_args.pop().unwrap()),
+                self.options.cap_mode,
+            ))
+        }
+    }
+
+    fn require_option_until<'a, T: FromStr>(&mut self, o: Optional, limit: usize) -> Result<Vec<T>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(MemoryState::ProcessingOptionals);
+        let values = self.require_option_all(o)?;
+        // verify the size of the vector does not exceed `n`
+        match values.len() <= limit {
+            true => Ok(values),
+            false => Err(Error::new(
+                self.help.clone(),
+                ErrorKind::ExceedingMaxCount,
+                ErrorContext::ExceededThreshold(
+                    self.known_args.pop().unwrap(),
+                    values.len(),
+                    limit,
+                ),
+                self.options.cap_mode,
+            )),
+        }
+    }
+
     /// Queries if a flag was raised once and only once.
     ///
     /// Errors if the flag has an attached value or was raised multiple times.
-    pub fn check_flag<'a>(&mut self, f: Flag) -> Result<bool> {
+    fn check_flag<'a>(&mut self, f: Flag) -> Result<bool> {
         self.state.proceed(MemoryState::ProcessingFlags);
         let occurences = self.check_flag_all(f)?;
         match occurences > 1 {
@@ -805,7 +792,7 @@ impl Cli<Memory> {
     /// Queries for the number of times a flag was raised.
     ///
     /// Errors if the flag has an attached value. Returning a zero indicates the flag was never raised.
-    pub fn check_flag_all<'a>(&mut self, f: Flag) -> Result<usize> {
+    fn check_flag_all<'a>(&mut self, f: Flag) -> Result<usize> {
         self.state.proceed(MemoryState::ProcessingFlags);
         // collect information on where the flag can be found
         let mut locs = self.take_flag_locs(f.get_name());
@@ -813,7 +800,7 @@ impl Cli<Memory> {
         if let Some(c) = f.get_switch() {
             locs.extend(self.take_switch_locs(c));
         };
-        self.known_args.push(Arg::Flag(f));
+        self.known_args.push(ArgType::Flag(f));
         let mut occurences = self.pull_flag(locs, false);
         // verify there are no values attached to this flag
         if let Some(val) = occurences.iter_mut().find(|p| p.is_some()) {
@@ -849,7 +836,7 @@ impl Cli<Memory> {
     /// Queries for the number of times a flag was raised up until `n` times.
     ///
     /// Errors if the flag has an attached value. Returning a zero indicates the flag was never raised.
-    pub fn check_flag_until<'a>(&mut self, f: Flag, limit: usize) -> Result<usize> {
+    fn check_flag_until<'a>(&mut self, f: Flag, limit: usize) -> Result<usize> {
         self.state.proceed(MemoryState::ProcessingFlags);
         let occurences = self.check_flag_all(f)?;
         // verify the size of the vector does not exceed `n`
@@ -861,6 +848,229 @@ impl Cli<Memory> {
                 ErrorContext::ExceededThreshold(self.known_args.pop().unwrap(), occurences, limit),
                 self.options.cap_mode,
             )),
+        }
+    }
+}
+
+// Public API
+
+impl Cli<Memory> {
+    /// Sets the [Help] attribute to display and checks if help has already been raised in the token stream.
+    ///
+    /// This function returns whether or not help has been asked for by checking
+    /// for [Help] as a flag on the command-line only if helping is enabled.
+    pub fn help(&mut self, help: Help) -> Result<bool> {
+        self.help = Some(help);
+        // check for flag if not already raised
+        if self.asking_for_help == false && self.is_help_enabled() == true {
+            self.asking_for_help =
+                self.check_flag(self.help.as_ref().unwrap().get_flag().clone())?;
+        }
+        Ok(self.asking_for_help)
+    }
+
+    /// Clears the `asking_for_help` status flag.
+    pub fn avoid_help(&mut self) -> () {
+        self.asking_for_help = false;
+    }
+
+    /// Directly calls the help error if asking for help is enabled.
+    pub fn raise_help(&self) -> Result<()> {
+        self.try_to_help()
+    }
+
+    /// Removes the current help text set for the command-line argument parser.
+    pub fn remove_help(&mut self) -> () {
+        self.help = None;
+    }
+
+    /// Determines if an `UnattachedArg` exists to be served as a subcommand.
+    ///
+    /// If so, it will call `interpret` on the type defined. If not, it will return none.
+    pub fn sub_get<'a, T: Subcommand<U>, U, V: AsRef<str>>(
+        &mut self,
+        name: V,
+    ) -> Result<Option<T>> {
+        self.known_args
+            .push(ArgType::Positional(Positional::new(name)));
+        // check but do not remove if an unattached arg exists
+        let command_exists = self
+            .tokens
+            .iter()
+            .find(|f| match f {
+                Some(Token::UnattachedArgument(_, _)) => true,
+                _ => false,
+            })
+            .is_some();
+        if command_exists == true {
+            // reset the parser state upon entering new subcommand
+            self.state = MemoryState::reset();
+            let sub = Some(T::interpret(self)?);
+            self.state.proceed(MemoryState::ProcessingSubcommands);
+            Ok(sub)
+        } else {
+            self.state.proceed(MemoryState::ProcessingSubcommands);
+            return Ok(None);
+        }
+    }
+
+    /// Tries to match the next `UnattachedArg` against an array of strings in `bank`.
+    ///
+    /// If fails, it will attempt to offer a spelling suggestion if the name is close.
+    ///
+    /// Panics if there is not a next `UnattachedArg`. It is recommended to not directly call
+    /// this command, but through an `interpret` call after `sub_get` has been issued.
+    pub fn sub_match<T: AsRef<str> + std::cmp::PartialEq>(&mut self, bank: &[T]) -> Result<String> {
+        // find the unattached arg's index before it is removed from the token stream
+        let i: usize = self
+            .tokens
+            .iter()
+            .find_map(|f| match f {
+                Some(Token::UnattachedArgument(i, _)) => Some(*i),
+                _ => None,
+            })
+            .expect("an unattached argument must exist before calling `sub_match(...)`");
+        let command = self
+            .next_uarg()
+            .expect("`sub_get(...)` must be called before this function");
+
+        // perform partial clean to ensure no arguments are remaining behind the command (uncaught options)
+        let ooc_arg = self.capture_bad_flag(i)?;
+
+        if bank.iter().find(|p| p.as_ref() == command).is_some() {
+            if let Some((prefix, key, pos)) = ooc_arg {
+                if pos < i {
+                    self.try_to_help()?;
+                    return Err(Error::new(
+                        self.help.clone(),
+                        ErrorKind::OutOfContextArgSuggest,
+                        ErrorContext::OutofContextArgSuggest(format!("{}{}", prefix, key), command),
+                        self.options.cap_mode,
+                    ));
+                }
+            }
+            Ok(command)
+        // try to offer a spelling suggestion otherwise say we've hit an unexpected argument
+        } else {
+            // bypass sequence alignment algorithm if threshold == 0
+            if let Some(w) = if self.options.threshold > 0 {
+                seqalin::sel_min_edit_str(&command, &bank, self.options.threshold)
+            } else {
+                None
+            } {
+                Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::SuggestSubcommand,
+                    ErrorContext::SuggestWord(command, w.to_string()),
+                    self.options.cap_mode,
+                ))
+            } else {
+                self.try_to_help()?;
+                Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::UnknownSubcommand,
+                    ErrorContext::UnknownSubcommand(
+                        self.known_args.pop().expect("requires positional argument"),
+                        command,
+                    ),
+                    self.options.cap_mode,
+                ))
+            }
+        }
+    }
+
+    pub fn check<'a>(&mut self, arg: Arg<Raisable>) -> Result<bool> {
+        match crate::arg::into_data(arg) {
+            ArgType::Flag(fla) => self.check_flag(fla),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    pub fn check_all<'a>(&mut self, arg: Arg<Raisable>) -> Result<usize> {
+        match crate::arg::into_data(arg) {
+            ArgType::Flag(fla) => self.check_flag_all(fla),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    pub fn check_until<'a>(&mut self, arg: Arg<Raisable>, limit: usize) -> Result<usize> {
+        match crate::arg::into_data(arg) {
+            ArgType::Flag(fla) => self.check_flag_until(fla, limit),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    pub fn get<'a, T: FromStr>(&mut self, arg: Arg<Valuable>) -> Result<Option<T>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        match crate::arg::into_data(arg) {
+            ArgType::Optional(opt) => self.get_option(opt),
+            ArgType::Positional(pos) => self.get_positional(pos),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    pub fn get_all<'a, T: FromStr>(&mut self, arg: Arg<Valuable>) -> Result<Option<Vec<T>>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        match crate::arg::into_data(arg) {
+            ArgType::Optional(opt) => self.get_option_all(opt),
+            ArgType::Positional(pos) => self.get_positional_all(pos),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    pub fn get_until<'a, T: FromStr>(
+        &mut self,
+        arg: Arg<Valuable>,
+        limit: usize,
+    ) -> Result<Option<Vec<T>>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        match crate::arg::into_data(arg) {
+            ArgType::Optional(opt) => self.get_option_until(opt, limit),
+            ArgType::Positional(pos) => self.get_positional_until(pos, limit),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    pub fn require<'a, T: FromStr>(&mut self, arg: Arg<Valuable>) -> Result<T>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        match crate::arg::into_data(arg) {
+            ArgType::Optional(opt) => self.require_option(opt),
+            ArgType::Positional(pos) => self.require_positional(pos),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    pub fn require_all<'a, T: FromStr>(&mut self, arg: Arg<Valuable>) -> Result<Vec<T>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        match crate::arg::into_data(arg) {
+            ArgType::Optional(opt) => self.require_option_all(opt),
+            ArgType::Positional(pos) => self.require_positional_all(pos),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    pub fn require_until<'a, T: FromStr>(
+        &mut self,
+        arg: Arg<Valuable>,
+        limit: usize,
+    ) -> Result<Vec<T>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        match crate::arg::into_data(arg) {
+            ArgType::Optional(opt) => self.require_option_until(opt, limit),
+            ArgType::Positional(pos) => self.require_positional_until(pos, limit),
+            _ => panic!("impossible code condition"),
         }
     }
 
@@ -904,7 +1114,7 @@ impl Cli<Memory> {
     ///
     /// Errors if an `AttachedArg` is found (could only be immediately after terminator)
     /// after the terminator.
-    pub fn get_remainder(&mut self) -> Result<Vec<String>> {
+    pub fn remainder(&mut self) -> Result<Vec<String>> {
         self.tokens
             .iter_mut()
             .skip_while(|tkn| match tkn {
@@ -923,7 +1133,7 @@ impl Cli<Memory> {
                         self.help.clone(),
                         ErrorKind::UnexpectedValue,
                         ErrorContext::UnexpectedValue(
-                            Arg::Flag(Flag::new("")),
+                            ArgType::Flag(Flag::new("")),
                             tkn.take().unwrap().take_str(),
                         ),
                         self.options.cap_mode,
@@ -975,8 +1185,8 @@ impl Cli<Memory> {
         self.known_args
             .iter()
             .filter_map(|f| match f {
-                Arg::Flag(f) => Some(f.get_name()),
-                Arg::Optional(o) => Some(o.get_flag().get_name()),
+                ArgType::Flag(f) => Some(f.get_name()),
+                ArgType::Optional(o) => Some(o.get_flag().get_name()),
                 _ => None,
             })
             .collect()
@@ -1276,8 +1486,7 @@ mod test {
             .save();
         // successfully matched 'get' command
         assert_eq!(
-            cli.match_subcommand(&["new", "get", "install", "edit"])
-                .unwrap(),
+            cli.sub_match(&["new", "get", "install", "edit"]).unwrap(),
             "get".to_string()
         );
 
@@ -1292,9 +1501,7 @@ mod test {
             ]))
             .save();
         // suggest 'get' command
-        assert!(cli
-            .match_subcommand(&["new", "get", "install", "edit"])
-            .is_err());
+        assert!(cli.sub_match(&["new", "get", "install", "edit"]).is_err());
     }
 
     #[test]
@@ -1310,9 +1517,7 @@ mod test {
             ]))
             .save();
         // cli has no positional arguments loaded to report as error... panic
-        assert!(cli
-            .match_subcommand(&["new", "get", "install", "edit"])
-            .is_err());
+        assert!(cli.sub_match(&["new", "get", "install", "edit"]).is_err());
     }
 
     #[test]
@@ -1419,7 +1624,7 @@ mod test {
         let mut cli = Cli::new()
             .parse(args(vec!["orbit", symbol::FLAG, "some", "extra", "words"]))
             .save();
-        let _: Vec<String> = cli.get_remainder().unwrap();
+        let _: Vec<String> = cli.remainder().unwrap();
         // terminator removed as well as its arguments that were ignored
         assert_eq!(cli.is_empty().unwrap(), ());
     }
@@ -1690,22 +1895,19 @@ mod test {
                 "-jto",
             ]))
             .save();
-        assert_eq!(
-            cli.get_remainder().unwrap(),
-            vec!["--map", "synthesis", "-jto"]
-        );
+        assert_eq!(cli.remainder().unwrap(), vec!["--map", "synthesis", "-jto"]);
         // the items were removed from the token stream
-        assert_eq!(cli.get_remainder().unwrap(), Vec::<String>::new());
+        assert_eq!(cli.remainder().unwrap(), Vec::<String>::new());
 
         // an attached argument can sneak in behind a terminator (handle in a result fn)
         let mut cli = Cli::new()
             .parse(args(vec!["orbit", "--=value", "extra"]))
             .save();
-        assert!(cli.get_remainder().is_err());
+        assert!(cli.remainder().is_err());
 
         let mut cli = Cli::new().parse(args(vec!["orbit", "--help"])).save();
         // the terminator was never found
-        assert_eq!(cli.get_remainder().unwrap(), Vec::<String>::new());
+        assert_eq!(cli.remainder().unwrap(), Vec::<String>::new());
     }
 
     #[test]
