@@ -963,12 +963,14 @@ impl Cli<Memory> {
         }
     }
 
-    /// Tries to match the next `UnattachedArg` against an array of strings in `bank`.
+    /// Tries to match the next positional argument against an array of strings in `bank`.
     ///
-    /// If fails, it will attempt to offer a spelling suggestion if the name is close.
+    /// If fails, it will attempt to offer a spelling suggestion if the name is close depending
+    /// on the configured cost threshold for string alignment.
     ///
-    /// Panics if there is not a next `UnattachedArg`. It is recommended to not directly call
-    /// this command, but through an `interpret` call after `nest(...)` has been issued.
+    /// Panics if there is not a next positional argument. This command should only be
+    /// called immediately in the nested subcommand's `interpret(...)` method, which is
+    /// triggered on a successful call to the previous command's call to `nest(...)`.
     pub fn select<T: AsRef<str> + std::cmp::PartialEq>(&mut self, bank: &[T]) -> Result<String> {
         // find the unattached arg's index before it is removed from the token stream
         let i: usize = self
