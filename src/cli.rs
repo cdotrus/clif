@@ -887,12 +887,11 @@ impl Cli<Memory> {
     /// Determines if an `UnattachedArg` exists to be served as a subcommand.
     ///
     /// If so, it will call `interpret` on the type defined. If not, it will return none.
-    pub fn sub_get<'a, T: Subcommand<U>, U, V: AsRef<str>>(
+    pub fn nest<'a, T: Subcommand<U>, U>(
         &mut self,
-        name: V,
+        subcommand: Arg<Callable>,
     ) -> Result<Option<T>> {
-        self.known_args
-            .push(ArgType::Positional(Positional::new(name)));
+        self.known_args.push(crate::arg::into_data(subcommand));
         // check but do not remove if an unattached arg exists
         let command_exists = self
             .tokens
@@ -919,8 +918,8 @@ impl Cli<Memory> {
     /// If fails, it will attempt to offer a spelling suggestion if the name is close.
     ///
     /// Panics if there is not a next `UnattachedArg`. It is recommended to not directly call
-    /// this command, but through an `interpret` call after `sub_get` has been issued.
-    pub fn sub_match<T: AsRef<str> + std::cmp::PartialEq>(&mut self, bank: &[T]) -> Result<String> {
+    /// this command, but through an `interpret` call after `nest(...)` has been issued.
+    pub fn select<T: AsRef<str> + std::cmp::PartialEq>(&mut self, bank: &[T]) -> Result<String> {
         // find the unattached arg's index before it is removed from the token stream
         let i: usize = self
             .tokens
@@ -929,10 +928,10 @@ impl Cli<Memory> {
                 Some(Token::UnattachedArgument(i, _)) => Some(*i),
                 _ => None,
             })
-            .expect("an unattached argument must exist before calling `sub_match(...)`");
+            .expect("an unattached argument must exist before calling `match(...)`");
         let command = self
             .next_uarg()
-            .expect("`sub_get(...)` must be called before this function");
+            .expect("`nest(...)` must be called before this function");
 
         // perform partial clean to ensure no arguments are remaining behind the command (uncaught options)
         let ooc_arg = self.capture_bad_flag(i)?;
@@ -1486,7 +1485,7 @@ mod test {
             .save();
         // successfully matched 'get' command
         assert_eq!(
-            cli.sub_match(&["new", "get", "install", "edit"]).unwrap(),
+            cli.select(&["new", "get", "install", "edit"]).unwrap(),
             "get".to_string()
         );
 
@@ -1501,7 +1500,7 @@ mod test {
             ]))
             .save();
         // suggest 'get' command
-        assert!(cli.sub_match(&["new", "get", "install", "edit"]).is_err());
+        assert!(cli.select(&["new", "get", "install", "edit"]).is_err());
     }
 
     #[test]
@@ -1517,7 +1516,7 @@ mod test {
             ]))
             .save();
         // cli has no positional arguments loaded to report as error... panic
-        assert!(cli.sub_match(&["new", "get", "install", "edit"]).is_err());
+        assert!(cli.select(&["new", "get", "install", "edit"]).is_err());
     }
 
     #[test]

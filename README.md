@@ -93,15 +93,15 @@ Any struct can be function as a command/subcommand as along as:
 
 There are 4 supported types of arguments recognized by `cliproc`:
 - _Flags_: boolean conditions (ex: `--verbose`)
-- _Optionals_: arbitrary types for values specified with as a key/value pair (ex: `--output <file>`)
+- _Options_: arbitrary types for values specified with as a key/value pair (ex: `--output <file>`)
 - _Positionals_: arbitrary types for values specified based upon position in the argument list (ex: `<name>`)
-- _Subcommands_: arbitrary types for nested commands that contain their own set of arguments (ex: `<command>`)
+- _Subcommands_: arbitrary types for nesting commands that contain their own set of arguments (ex: `<command>`)
 
 The command-line processor interprets arguments as they are provided. For this reason, there is a specific order in which a struct must handle its attributes according to which one of the argument types it requests data from.
 
 Upon interpreting a command or subcommand, the _argument discovery order_ must follow:
 1. Flags
-2. Optionals
+2. Options
 3. Positionals
 4. Subcommands
 
@@ -111,10 +111,10 @@ Failure to specify the struct initialization in this order is a programmer's err
 
 The command-line processor has the ability to:  
 
-- Accept long options for flags and optionals
+- Accept long options for flags and options
     - `--verbose`, `--output a.out`
 
-- Accept _switches_ (short options) for flags and optionals
+- Accept _switches_ (short options) for flags and options
     - `-v`, `-o a.out`
 
 - Accept positional arguments
@@ -132,7 +132,7 @@ The command-line processor has the ability to:
 - Capture variable instances of a flag with an optional maximum limit
     - `--verbose --verbose --verbose`
 
-- Capture variable instances of an optional (order-preserving) with an optional maximum limit
+- Capture variable instances of an option (order-preserving) with an optional maximum limit
     - `--num 2 --num 17 --num 5`
 
 - Capture variable positional calls for a single argument (order-preserving):

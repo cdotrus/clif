@@ -4,10 +4,12 @@ use std::marker::PhantomData;
 
 pub struct Raisable {}
 pub struct Valuable {}
+pub struct Callable {}
 
 pub trait ArgState {}
 
 impl ArgState for Raisable {}
+impl ArgState for Callable {}
 impl ArgState for Valuable {}
 
 #[derive(PartialEq)]
@@ -68,6 +70,15 @@ impl Arg<Valuable> {
                 false => self.data,
             },
             _marker: self._marker,
+        }
+    }
+}
+
+impl Arg<Callable> {
+    pub fn subcommand<T: AsRef<str>>(name: T) -> Arg<Callable> {
+        Self {
+            data: ArgType::Positional(Positional::new(name)),
+            _marker: PhantomData::<Callable>,
         }
     }
 }

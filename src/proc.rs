@@ -114,7 +114,7 @@ mod test {
             let m = Ok(Op {
                 force: cli.check(Arg::flag("force"))?,
                 version: cli.check(Arg::flag("version"))?,
-                command: cli.sub_get("subcommand")?,
+                command: cli.nest(Arg::subcommand("subcommand"))?,
             });
             cli.is_empty()?;
             m
@@ -136,7 +136,7 @@ mod test {
 
     impl Subcommand<()> for OpSubcommand {
         fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
-            match cli.sub_match(&["add", "mult", "sub"])?.as_ref() {
+            match cli.select(&["add", "mult", "sub"])?.as_ref() {
                 "add" => Ok(OpSubcommand::Add(Add::interpret(cli)?)),
                 _ => panic!("an unimplemented command was passed through!"),
             }

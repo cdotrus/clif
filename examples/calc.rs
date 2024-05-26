@@ -14,7 +14,7 @@ impl Command for Calc {
         Ok(Calc {
             force: cli.check(Arg::flag("force"))?,
             version: cli.check(Arg::flag("version"))?,
-            op: cli.sub_get("operation")?,
+            op: cli.nest(Arg::subcommand("operation"))?,
         })
     }
 
@@ -43,7 +43,7 @@ enum Operation {
 
 impl Subcommand<()> for Operation {
     fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
-        match cli.sub_match(&["add", "mult"])?.as_ref() {
+        match cli.select(&["add", "mult"])?.as_ref() {
             "add" => Ok(Operation::Add(Add::interpret(cli)?)),
             "mult" => Ok(Operation::Mult(Mult::interpret(cli)?)),
             _ => panic!("an unimplemented command was passed through!"),
