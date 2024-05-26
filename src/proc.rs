@@ -1,5 +1,5 @@
 use crate::cli;
-use crate::cli::{states::Memory, Cli};
+use crate::cli::{stage::Memory, Cli};
 
 /// The return type for a [Command]'s execution process.
 pub type Result = std::result::Result<(), Box<dyn std::error::Error>>;

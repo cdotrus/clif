@@ -4,7 +4,7 @@ use crate::seqalin;
 use crate::seqalin::Cost;
 use crate::{arg::*, Command, Subcommand};
 use colored::Colorize;
-use states::*;
+use stage::*;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::marker::PhantomData;
@@ -133,7 +133,7 @@ impl MemoryState {
     }
 }
 
-pub mod states {
+pub mod stage {
     pub trait ProcessorState {}
 
     pub struct Build;

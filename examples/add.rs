@@ -4,8 +4,8 @@ use std::fmt::Display;
 
 use cliproc::cli;
 use cliproc::proc;
+use cliproc::{stage::Memory, Cli, Command};
 use cliproc::{Arg, Help};
-use cliproc::{Cli, Command, Memory};
 
 use std::process::ExitCode;
 

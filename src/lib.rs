@@ -7,7 +7,7 @@ pub mod cli;
 pub mod proc;
 
 pub use arg::Arg;
-pub use cli::states::{Build, Memory, Ready};
+pub use cli::stage;
 pub use cli::Cli;
 pub use help::Help;
 pub use proc::{Command, Subcommand};
@@ -16,6 +16,7 @@ pub use std::process::ExitCode;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use stage::Memory;
 
     /// Helper test `fn` to write vec of &str as iterator for Cli parameter.
     fn args<'a>(args: Vec<&'a str>) -> Box<dyn Iterator<Item = String> + 'a> {

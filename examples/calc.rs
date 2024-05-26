@@ -1,5 +1,5 @@
 use cliproc::{cli, proc};
-use cliproc::{Arg, Cli, Command, ExitCode, Help, Memory, Subcommand};
+use cliproc::{stage::Memory, Arg, Cli, Command, ExitCode, Help, Subcommand};
 use std::env;
 
 #[derive(Debug, PartialEq)]

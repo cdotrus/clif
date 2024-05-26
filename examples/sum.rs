@@ -1,8 +1,7 @@
 use std::env;
 
 use cliproc::{cli, proc};
-use cliproc::{Arg, Help};
-use cliproc::{Cli, Command, ExitCode, Memory};
+use cliproc::{stage::Memory, Arg, Cli, Command, ExitCode, Help};
 
 fn main() -> ExitCode {
     Cli::default().parse(env::args()).go::<Sum>()
