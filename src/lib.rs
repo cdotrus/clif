@@ -44,7 +44,7 @@ mod tests {
             impl Command for Add {
                 fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
                     // set help text in case of an error
-                    cli.help(Help::default().text(String::new()))?;
+                    cli.help(Help::with(String::new()))?;
                     let radd = Add {
                         verbose: cli.check(Arg::flag("verbose"))?,
                         lhs: cli.require(Arg::positional("lhs"))?,
@@ -97,7 +97,7 @@ mod tests {
             impl Command for Add {
                 fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
                     // set help text in case of an error
-                    cli.help(Help::default().text(String::new()))?;
+                    cli.help(Help::with(String::new()))?;
                     let radd = Add {
                         lhs: cli.require(Arg::positional("lhs"))?,
                         verbose: cli.check(Arg::flag("verbose"))?,

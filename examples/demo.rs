@@ -12,7 +12,7 @@ struct Demo {
 impl Command for Demo {
     // 2a. Map the command-line data to the struct's data
     fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
-        cli.help(Help::default().text(HELP))?;
+        cli.help(Help::with(HELP))?;
         Ok(Demo {
             name: cli.require(Arg::option("name").switch('n'))?,
             count: cli.get(Arg::option("count").switch('c'))?,

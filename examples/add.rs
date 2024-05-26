@@ -41,7 +41,7 @@ impl Error for AddError {}
 
 impl Command for Add {
     fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
-        cli.help(Help::default().text(HELP))?;
+        cli.help(Help::with(HELP).flag("help").switch('h'))?;
         Ok(Add {
             verbose: cli.check(Arg::flag("verbose"))?,
             left: cli.require(Arg::positional("left"))?,

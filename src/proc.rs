@@ -73,7 +73,7 @@ mod test {
 
     impl Subcommand<()> for Add {
         fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
-            cli.help(Help::new().text("Usage: add <lhs> <rhs> [--verbose]"))?;
+            cli.help(Help::with("Usage: add <lhs> <rhs> [--verbose]"))?;
             // the ability to "learn options" beforehand is possible, or can be skipped
             // "learn options" here (take in known args (as ref?))
             Ok(Add {

@@ -866,7 +866,10 @@ impl Cli<Memory> {
             // check if the user is asking for help by raising the help flag
             if let Some(hp) = &self.help {
                 if raised == true
-                    && hp.get_flag().get_name()
+                    && crate::arg::into_data(hp.get_arg())
+                        .into_flag()
+                        .unwrap()
+                        .get_name()
                         == self
                             .known_args
                             .last()
@@ -905,32 +908,32 @@ impl Cli<Memory> {
 // Public API
 
 impl Cli<Memory> {
-    /// Sets the [Help] attribute to display and checks if help has already been raised in the token stream.
+    /// Sets the [Help] information for the command-line processor.
     ///
-    /// This function returns whether or not help has been asked for by checking
-    /// for [Help] as a flag on the command-line only if helping is enabled.
+    /// Once the help information is updated, this function returns true if help
+    /// is detected on the command-line only if help is configured as a priority.
     pub fn help(&mut self, help: Help) -> Result<bool> {
         self.help = Some(help);
         // check for flag if not already raised
         if self.asking_for_help == false && self.is_help_enabled() == true {
-            self.asking_for_help =
-                self.check_flag(self.help.as_ref().unwrap().get_flag().clone())?;
+            self.asking_for_help = self.check(self.help.as_ref().unwrap().get_arg())?;
         }
         Ok(self.asking_for_help)
     }
 
-    /// Clears the `asking_for_help` status flag.
-    pub fn avoid_help(&mut self) -> () {
-        self.asking_for_help = false;
-    }
-
-    /// Directly calls the help error if asking for help is enabled.
+    /// Attempts to display the currently available help information if help was
+    /// detected on the command-line.
     pub fn raise_help(&self) -> Result<()> {
         self.try_to_help()
     }
 
-    /// Removes the current help text set for the command-line argument parser.
-    pub fn remove_help(&mut self) -> () {
+    /// Clears the status flag indicating if help was detected on the command-line
+    pub fn lower_help(&mut self) -> () {
+        self.asking_for_help = false;
+    }
+
+    /// Removes the current help information stored for the command-line processor.
+    pub fn unset_help(&mut self) -> () {
         self.help = None;
     }
 

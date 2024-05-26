@@ -28,7 +28,7 @@ impl Sum {
 impl Command for Sum {
     fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
         // set short help text in case of an error
-        cli.help(Help::default().text(HELP))?;
+        cli.help(Help::with(HELP))?;
         Ok(Sum {
             verbose: cli.check(Arg::flag("verbose"))?,
             nums: cli.require_all(Arg::positional("num"))?,

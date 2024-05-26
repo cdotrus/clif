@@ -68,7 +68,7 @@ struct Add {
 
 impl Subcommand<()> for Add {
     fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
-        cli.help(Help::new().text("Addition"))?;
+        cli.help(Help::with("Addition"))?;
         Ok(Add {
             force: cli.check(Arg::flag("force"))?,
             verbose: cli.check(Arg::flag("verbose"))?,
@@ -98,7 +98,7 @@ struct Mult {
 
 impl Subcommand<()> for Mult {
     fn interpret(cli: &mut Cli<Memory>) -> cli::Result<Self> {
-        cli.help(Help::new().text("Multiplication"))?;
+        cli.help(Help::with("Multiplication"))?;
         Ok(Mult {
             lhs: cli.require(Arg::positional("lhs"))?,
             rhs: cli.require(Arg::positional("rhs"))?,
