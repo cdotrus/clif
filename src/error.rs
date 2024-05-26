@@ -3,11 +3,44 @@ use crate::help::Help;
 use colored::Colorize;
 use std::fmt::Display;
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum ColorMode {
+    On,
+    Off,
+    Normal,
+}
+
+impl Default for ColorMode {
+    fn default() -> Self {
+        Self::Normal
+    }
+}
+
+impl ColorMode {
+    pub fn new() -> Self {
+        Self::Off
+    }
+
+    pub fn sync(&self) {
+        match self {
+            Self::On => colored::control::set_override(true),
+            Self::Off => colored::control::set_override(false),
+            Self::Normal => colored::control::unset_override(),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum CapMode {
     Upper,
     Lower,
     Manual,
+}
+
+impl CapMode {
+    pub fn new() -> Self {
+        Self::Manual
+    }
 }
 
 impl Default for CapMode {
@@ -171,7 +204,7 @@ impl Display for Error {
             ErrorContext::ExceededThreshold(arg, cur, max) => {
                 write!(
                     f,
-                    "Option \"{}\" can be used up to {} times but was supplied {} times",
+                    "option \"{}\" can be used up to {} times but was supplied {} times",
                     arg.to_string().blue(),
                     max,
                     cur
@@ -187,7 +220,7 @@ impl Display for Error {
             ErrorContext::FailedCast(arg, val, err) => {
                 write!(
                     f,
-                    "Argument \"{}\" failed to process value \"{}\": {}",
+                    "argument \"{}\" failed to process value \"{}\": {}",
                     arg.to_string().blue(),
                     val.to_string().yellow(),
                     format_err_msg(err.to_string(), self.cap_mode)
@@ -197,7 +230,7 @@ impl Display for Error {
                 ErrorKind::MissingPositional => {
                     write!(
                         f,
-                        "Missing positional argument \"{}\"{}",
+                        "missing positional argument \"{}\"{}",
                         arg.to_string().blue(),
                         self.help_tip().unwrap_or(String::new())
                     )
@@ -205,7 +238,7 @@ impl Display for Error {
                 ErrorKind::MissingOption => {
                     write!(
                         f,
-                        "Missing required option \"{}\"{}",
+                        "missing required option \"{}\"{}",
                         arg.to_string().blue(),
                         self.help_tip().unwrap_or(String::new())
                     )
@@ -213,14 +246,14 @@ impl Display for Error {
                 ErrorKind::DuplicateOptions => {
                     write!(
                         f,
-                        "Argument \"{}\" can only be supplied once",
+                        "argument \"{}\" can only be supplied once",
                         arg.to_string().blue()
                     )
                 }
                 ErrorKind::ExpectingValue => {
                     write!(
                         f,
-                        "Option \"{}\" accepts one value but zero were supplied",
+                        "option \"{}\" accepts one value but zero were supplied",
                         arg.to_string().blue()
                     )
                 }
@@ -230,7 +263,7 @@ impl Display for Error {
                 ErrorKind::SuggestArg => {
                     write!(
                         f,
-                        "Invalid argument \"{}\"{}Did you mean \"{}\"?",
+                        "invalid argument \"{}\"{}Did you mean \"{}\"?",
                         word.yellow(),
                         NEW_PARAGRAPH,
                         suggestion.green()
@@ -239,7 +272,7 @@ impl Display for Error {
                 ErrorKind::SuggestSubcommand => {
                     write!(
                         f,
-                        "Invalid subcommand \"{}\"{}Did you mean \"{}\"?",
+                        "invalid subcommand \"{}\"{}Did you mean \"{}\"?",
                         word.yellow(),
                         NEW_PARAGRAPH,
                         suggestion.green()
@@ -248,12 +281,12 @@ impl Display for Error {
                 _ => panic!("reached unreachable error kind for a failed argument error context"),
             },
             ErrorContext::OutofContextArgSuggest(arg, subcommand) => {
-                write!(f, "Argument \"{}\" is unknown or invalid in the current context{}Maybe move it after \"{}\"?", arg.yellow(), NEW_PARAGRAPH, subcommand.green())
+                write!(f, "argument \"{}\" is unknown or invalid in the current context{}Maybe move it after \"{}\"?", arg.yellow(), NEW_PARAGRAPH, subcommand.green())
             }
             ErrorContext::UnexpectedValue(flag, val) => {
                 write!(
                     f,
-                    "Flag \"{}\" cannot accept a value but was given \"{}\"",
+                    "flag \"{}\" cannot accept a value but was given \"{}\"",
                     flag.to_string().blue(),
                     val.yellow()
                 )
@@ -261,7 +294,7 @@ impl Display for Error {
             ErrorContext::UnexpectedArg(word) => {
                 write!(
                     f,
-                    "Invalid argument \"{}\"{}",
+                    "invalid argument \"{}\"{}",
                     word.yellow(),
                     self.help_tip().unwrap_or(String::new())
                 )
@@ -269,7 +302,7 @@ impl Display for Error {
             ErrorContext::UnknownSubcommand(arg, subcommand) => {
                 write!(
                     f,
-                    "Invalid subcommand \"{}\" for \"{}\"",
+                    "invalid subcommand \"{}\" for \"{}\"",
                     subcommand.yellow(),
                     arg.to_string().blue()
                 )

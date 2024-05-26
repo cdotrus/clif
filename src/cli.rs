@@ -1,4 +1,4 @@
-use crate::error::{self, CapMode};
+use crate::error::{self, CapMode, ColorMode};
 use crate::help::Help;
 use crate::seqalin;
 use crate::seqalin::Cost;
@@ -162,21 +162,27 @@ impl<S: ProcessorState> Cli<S> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 struct CliOptions {
     pub prioritize_help: bool,
     pub cap_mode: CapMode,
     pub threshold: Cost,
     pub capacity: usize,
+    pub color_mode: ColorMode,
+    pub err_prefix: String,
+    pub err_suffix: String,
 }
 
 impl CliOptions {
     pub fn new() -> Self {
         Self {
             prioritize_help: true,
-            cap_mode: CapMode::Manual,
+            cap_mode: CapMode::new(),
             threshold: 0,
             capacity: 0,
+            color_mode: ColorMode::new(),
+            err_prefix: String::new(),
+            err_suffix: String::new(),
         }
     }
 }
@@ -188,6 +194,9 @@ impl Default for CliOptions {
             cap_mode: CapMode::default(),
             threshold: 2,
             capacity: 0,
+            color_mode: ColorMode::default(),
+            err_prefix: String::from(format!("{}: ", "error".red().bold())),
+            err_suffix: String::new(),
         }
     }
 }
@@ -236,6 +245,8 @@ impl Cli<Build> {
         }
     }
 
+    /// Sets the error message
+
     /// Sets the initial capacity for the data structures that are used to hold
     /// the parsed command-line data.
     pub fn with_capacity(mut self, cap: usize) -> Self {
@@ -258,6 +269,25 @@ impl Cli<Build> {
     /// Automatically lowercase error messages during program execution.
     pub fn auto_lowercase_errors(mut self) -> Self {
         self.options.cap_mode = CapMode::Lower;
+        self
+    }
+
+    /// Enables coloring for the output.
+    pub fn enable_color(mut self) -> Self {
+        self.options.color_mode = ColorMode::On;
+        self
+    }
+
+    /// Disables coloring for the output.
+    pub fn disable_color(mut self) -> Self {
+        self.options.color_mode = ColorMode::Off;
+        self
+    }
+
+    /// Allows the output to be colored, but determines coloring based on
+    /// other factors in the environment.
+    pub fn allow_color(mut self) -> Self {
+        self.options.color_mode = ColorMode::Normal;
         self
     }
 
@@ -284,11 +314,26 @@ impl Cli<Build> {
         self
     }
 
+    /// Sets the text to come before an error message if one is reported during
+    /// processing.
+    pub fn error_prefix<T: AsRef<str>>(mut self, prefix: T) -> Self {
+        self.options.err_prefix = String::from(prefix.as_ref());
+        self
+    }
+
+    /// Sets the text to come after an error message if one is reported during
+    /// processing.
+    pub fn error_suffix<T: AsRef<str>>(mut self, suffix: T) -> Self {
+        self.options.err_suffix = String::from(suffix.as_ref());
+        self
+    }
+
     /// Builds the [Cli] struct by tokenizing the [String] iterator into a
     /// representable form for further processing.
     ///
     /// This function transitions the [Cli] state to the [Block] state.
     pub fn parse<T: Iterator<Item = String>>(mut self, args: T) -> Cli<Ready> {
+        self.options.color_mode.sync();
         let mut tokens = Vec::<Option<Token>>::with_capacity(self.options.capacity);
         let mut store = HashMap::with_capacity(self.options.capacity);
         let mut terminated = false;
@@ -394,15 +439,16 @@ impl Cli<Ready> {
                 // verify the cli has no additional arguments if this is the top-level command being parsed
                 match cli.is_empty() {
                     Ok(_) => {
-                        let cap_mode = cli.options.cap_mode;
+                        let cli_opts = cli.options.clone();
                         std::mem::drop(cli);
                         match program.execute() {
                             Ok(_) => ExitCode::from(0),
                             Err(err) => {
                                 eprintln!(
-                                    "{}: {}",
-                                    "error".red().bold(),
-                                    error::format_err_msg(err.to_string(), cap_mode)
+                                    "{}{}{}",
+                                    cli_opts.err_prefix,
+                                    error::format_err_msg(err.to_string(), cli_opts.cap_mode),
+                                    cli_opts.err_suffix
                                 );
                                 ExitCode::from(101)
                             }
@@ -410,12 +456,14 @@ impl Cli<Ready> {
                     }
                     // report cli error
                     Err(err) => {
+                        let cli_opts = cli.options;
                         match err.kind() {
                             ErrorKind::Help => println!("{}", &err),
                             _ => eprintln!(
-                                "{}: {}",
-                                "error".red().bold(),
-                                error::format_err_msg(err.to_string(), cli.options.cap_mode)
+                                "{}{}{}",
+                                cli_opts.err_prefix,
+                                error::format_err_msg(err.to_string(), cli_opts.cap_mode),
+                                cli_opts.err_suffix
                             ),
                         }
                         ExitCode::from(err.code())
@@ -424,12 +472,14 @@ impl Cli<Ready> {
             }
             // report cli error
             Err(err) => {
+                let cli_opts = cli.options;
                 match err.kind() {
                     ErrorKind::Help => println!("{}", &err),
                     _ => eprintln!(
-                        "{}: {}",
-                        "error".red().bold(),
-                        error::format_err_msg(err.to_string(), cli.options.cap_mode)
+                        "{}{}{}",
+                        cli_opts.err_prefix,
+                        error::format_err_msg(err.to_string(), cli_opts.cap_mode),
+                        cli_opts.err_suffix
                     ),
                 }
                 ExitCode::from(err.code())
