@@ -2,10 +2,17 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::marker::PhantomData;
 
+/// An argument type that can be switched on/off.
 pub struct Raisable {}
+
+/// An argument type that can store a value.
 pub struct Valuable {}
+
+/// An argument type that can be invoked to take an action.
 pub struct Callable {}
 
+/// The typestate pattern for the different arguments that are possible on
+/// the command-line.
 pub trait ArgState {}
 
 impl ArgState for Raisable {}
@@ -26,13 +33,15 @@ impl<S: ArgState> From<Arg<S>> for ArgType {
 }
 
 impl Arg<Raisable> {
-    pub fn flag<T: AsRef<str>>(s: T) -> Arg<Raisable> {
+    /// Create a new flag argument.
+    pub fn flag<T: AsRef<str>>(name: T) -> Arg<Raisable> {
         Self {
-            data: ArgType::Flag(Flag::new(s.as_ref().to_string())),
+            data: ArgType::Flag(Flag::new(name.as_ref().to_string())),
             _marker: PhantomData::<Raisable>,
         }
     }
 
+    /// Specify the switch character that is also associated with this flag.
     pub fn switch(self, c: char) -> Self {
         Self {
             data: ArgType::Flag(self.data.into_flag().unwrap().switch(c)),
@@ -42,6 +51,7 @@ impl Arg<Raisable> {
 }
 
 impl Arg<Valuable> {
+    /// Create a new option argument.
     pub fn option<T: AsRef<str>>(name: T) -> Arg<Valuable> {
         Self {
             data: ArgType::Optional(Optional::new(name)),
@@ -49,6 +59,7 @@ impl Arg<Valuable> {
         }
     }
 
+    /// Create a new positional argument.
     pub fn positional<T: AsRef<str>>(name: T) -> Arg<Valuable> {
         Self {
             data: ArgType::Positional(Positional::new(name)),
@@ -56,16 +67,24 @@ impl Arg<Valuable> {
         }
     }
 
-    pub fn value<T: AsRef<str>>(self, s: T) -> Self {
+    /// Specify the name of the value that is associated with this argument.
+    ///
+    /// This function only modifies arguments that were created as options, and
+    /// silently leaves any other arguments unmodified.
+    pub fn value<T: AsRef<str>>(self, name: T) -> Self {
         Self {
             data: match self.data.is_option() {
-                true => ArgType::Optional(self.data.into_option().unwrap().value(s)),
+                true => ArgType::Optional(self.data.into_option().unwrap().value(name)),
                 false => self.data,
             },
             _marker: self._marker,
         }
     }
 
+    /// Specify the switch character that is associated with this argument.
+    ///
+    /// This function only modifies arguments that were created as options, and
+    /// silently leaves any other arguments unmodified.
     pub fn switch(self, c: char) -> Arg<Valuable> {
         Self {
             data: match self.data.is_option() {
@@ -78,6 +97,7 @@ impl Arg<Valuable> {
 }
 
 impl Arg<Callable> {
+    /// Create a new subcommand argument.
     pub fn subcommand<T: AsRef<str>>(name: T) -> Arg<Callable> {
         Self {
             data: ArgType::Positional(Positional::new(name)),
@@ -85,8 +105,6 @@ impl Arg<Callable> {
         }
     }
 }
-
-pub trait HoldsValue: Sized {}
 
 mod symbol {
     pub const FLAG: &str = "--";
