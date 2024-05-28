@@ -866,10 +866,7 @@ impl Cli<Memory> {
             // check if the user is asking for help by raising the help flag
             if let Some(hp) = &self.help {
                 if raised == true
-                    && crate::arg::into_data(hp.get_arg())
-                        .into_flag()
-                        .unwrap()
-                        .get_name()
+                    && ArgType::from(hp.get_arg()).into_flag().unwrap().get_name()
                         == self
                             .known_args
                             .last()
@@ -944,7 +941,7 @@ impl Cli<Memory> {
         &mut self,
         subcommand: Arg<Callable>,
     ) -> Result<Option<T>> {
-        self.known_args.push(crate::arg::into_data(subcommand));
+        self.known_args.push(ArgType::from(subcommand));
         // check but do not remove if an unattached arg exists
         let command_exists = self
             .tokens
@@ -1034,21 +1031,21 @@ impl Cli<Memory> {
     }
 
     pub fn check<'a>(&mut self, arg: Arg<Raisable>) -> Result<bool> {
-        match crate::arg::into_data(arg) {
+        match ArgType::from(arg) {
             ArgType::Flag(fla) => self.check_flag(fla),
             _ => panic!("impossible code condition"),
         }
     }
 
     pub fn check_all<'a>(&mut self, arg: Arg<Raisable>) -> Result<usize> {
-        match crate::arg::into_data(arg) {
+        match ArgType::from(arg) {
             ArgType::Flag(fla) => self.check_flag_all(fla),
             _ => panic!("impossible code condition"),
         }
     }
 
     pub fn check_until<'a>(&mut self, arg: Arg<Raisable>, limit: usize) -> Result<usize> {
-        match crate::arg::into_data(arg) {
+        match ArgType::from(arg) {
             ArgType::Flag(fla) => self.check_flag_until(fla, limit),
             _ => panic!("impossible code condition"),
         }
@@ -1058,7 +1055,7 @@ impl Cli<Memory> {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
-        match crate::arg::into_data(arg) {
+        match ArgType::from(arg) {
             ArgType::Optional(opt) => self.get_option(opt),
             ArgType::Positional(pos) => self.get_positional(pos),
             _ => panic!("impossible code condition"),
@@ -1069,7 +1066,7 @@ impl Cli<Memory> {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
-        match crate::arg::into_data(arg) {
+        match ArgType::from(arg) {
             ArgType::Optional(opt) => self.get_option_all(opt),
             ArgType::Positional(pos) => self.get_positional_all(pos),
             _ => panic!("impossible code condition"),
@@ -1084,7 +1081,7 @@ impl Cli<Memory> {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
-        match crate::arg::into_data(arg) {
+        match ArgType::from(arg) {
             ArgType::Optional(opt) => self.get_option_until(opt, limit),
             ArgType::Positional(pos) => self.get_positional_until(pos, limit),
             _ => panic!("impossible code condition"),
@@ -1095,7 +1092,7 @@ impl Cli<Memory> {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
-        match crate::arg::into_data(arg) {
+        match ArgType::from(arg) {
             ArgType::Optional(opt) => self.require_option(opt),
             ArgType::Positional(pos) => self.require_positional(pos),
             _ => panic!("impossible code condition"),
@@ -1106,7 +1103,7 @@ impl Cli<Memory> {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
-        match crate::arg::into_data(arg) {
+        match ArgType::from(arg) {
             ArgType::Optional(opt) => self.require_option_all(opt),
             ArgType::Positional(pos) => self.require_positional_all(pos),
             _ => panic!("impossible code condition"),
@@ -1121,7 +1118,7 @@ impl Cli<Memory> {
     where
         <T as FromStr>::Err: 'static + std::error::Error,
     {
-        match crate::arg::into_data(arg) {
+        match ArgType::from(arg) {
             ArgType::Optional(opt) => self.require_option_until(opt, limit),
             ArgType::Positional(pos) => self.require_positional_until(pos, limit),
             _ => panic!("impossible code condition"),

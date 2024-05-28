@@ -12,14 +12,17 @@ impl ArgState for Raisable {}
 impl ArgState for Callable {}
 impl ArgState for Valuable {}
 
+/// A container for data provided on the command-line.
 #[derive(PartialEq)]
 pub struct Arg<S: ArgState> {
     data: ArgType,
     _marker: PhantomData<S>,
 }
 
-pub fn into_data<S: ArgState>(arg: Arg<S>) -> ArgType {
-    arg.data
+impl<S: ArgState> From<Arg<S>> for ArgType {
+    fn from(value: Arg<S>) -> Self {
+        value.data
+    }
 }
 
 impl Arg<Raisable> {

@@ -119,7 +119,7 @@ impl Error {
 
     /// Constructs a simple help tip to insert into an error message if help exists.
     fn help_tip(&self) -> Option<String> {
-        let flag_str = crate::arg::into_data(self.help.as_ref()?.get_arg()).to_string();
+        let flag_str = ArgType::from(self.help.as_ref()?.get_arg()).to_string();
         Some(format!(
             "{}For more information, try \"{}\".",
             NEW_PARAGRAPH,
