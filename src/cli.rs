@@ -13,7 +13,7 @@ use std::str::FromStr;
 
 pub use crate::error::{Error, ErrorContext, ErrorKind};
 
-/// The return type for a [Command]'s construction process.
+/// The return type for a [Command]'s interpretation process.
 pub type Result<T> = std::result::Result<T, Error>;
 
 mod symbol {
@@ -134,10 +134,21 @@ impl MemoryState {
 }
 
 pub mod stage {
+    /// The typestate pattern for the different stages in processing data from 
+    /// the command-line.
     pub trait ProcessorState {}
 
+    /// The first stage in the command-line processor. The processor can be
+    /// configured when it is in this state. 
     pub struct Build;
+
+    /// The second stage in the command-line processor. The processor can be
+    /// routed to different modes of processing.
     pub struct Ready;
+
+    /// The third and final stage in the command-line processor. The processor
+    /// stores the command-line data and allows for requests to query what data
+    /// it captured.
     pub struct Memory;
 
     impl ProcessorState for Build {}
@@ -148,6 +159,7 @@ pub mod stage {
 }
 
 impl<S: ProcessorState> Cli<S> {
+    /// Perform a state transition for the command-line processor.
     fn transition<T: ProcessorState>(self) -> Cli<T> {
         Cli::<T> {
             tokens: self.tokens,
@@ -201,6 +213,7 @@ impl Default for CliOptions {
     }
 }
 
+/// The command-line processor.
 #[derive(Debug, PartialEq)]
 pub struct Cli<S: ProcessorState> {
     /// The order-preserved list of tokens
@@ -232,6 +245,8 @@ impl Default for Cli<Build> {
 }
 
 impl Cli<Build> {
+    /// Create a new command-line processor. The processor is configured with
+    /// minimal options enabled.
     pub fn new() -> Self {
         Self {
             tokens: Vec::new(),
@@ -245,10 +260,8 @@ impl Cli<Build> {
         }
     }
 
-    /// Sets the error message
-
     /// Sets the initial capacity for the data structures that are used to hold
-    /// the parsed command-line data.
+    /// the processed command-line data.
     pub fn with_capacity(mut self, cap: usize) -> Self {
         self.options.capacity = cap;
         self
@@ -272,6 +285,12 @@ impl Cli<Build> {
         self
     }
 
+    /// Do not allow any formatting on error messages during program execution.
+    pub fn disable_auto_case_errors(mut self) -> Self {
+        self.options.cap_mode = CapMode::Manual;
+        self
+    }
+
     /// Enables coloring for the output.
     pub fn enable_color(mut self) -> Self {
         self.options.color_mode = ColorMode::On;
@@ -288,12 +307,6 @@ impl Cli<Build> {
     /// other factors in the environment.
     pub fn allow_color(mut self) -> Self {
         self.options.color_mode = ColorMode::Normal;
-        self
-    }
-
-    /// Do not allow any formatting on error messages during program execution.
-    pub fn disable_auto_case_errors(mut self) -> Self {
-        self.options.cap_mode = CapMode::Manual;
         self
     }
 
@@ -331,7 +344,7 @@ impl Cli<Build> {
     /// Builds the [Cli] struct by tokenizing the [String] iterator into a
     /// representable form for further processing.
     ///
-    /// This function transitions the [Cli] state to the [Block] state.
+    /// This function transitions the [Cli] state to the [Ready] state.
     pub fn parse<T: Iterator<Item = String>>(mut self, args: T) -> Cli<Ready> {
         self.options.color_mode.sync();
         let mut tokens = Vec::<Option<Token>>::with_capacity(self.options.capacity);
@@ -425,11 +438,10 @@ impl Cli<Ready> {
     /// 1. `T` interprets the command-line data into its own structural data
     /// 2. `T` executes its task
     ///
-    /// This function will handle errors and report them to the `stderr` if one
-    /// is encountered.
-    ///
-    /// If an error is encountered, the function returns 101 as the exit code.
-    /// If no error is encountered, the function returns 0 as the exit code.
+    /// This function will handle errors and report them to `stderr` if one
+    /// is encountered. If an error is encountered, the function returns 101 as 
+    /// the exit code. If no error is encountered, the function returns 0 as the 
+    /// exit code.
     pub fn go<T: Command>(self) -> ExitCode {
         let mut cli: Cli<Memory> = self.save();
 
@@ -1030,6 +1042,15 @@ impl Cli<Memory> {
         }
     }
 
+    /// Returns the existence of `arg`.
+    /// 
+    /// - If `arg` is a flag, then it checks for the associated name.
+    /// 
+    /// If `arg` is found, then the result is `true`. If `arg` is not found, then 
+    /// the result is `false`. 
+    /// 
+    /// This function errors if a value is associated with the `arg` or if the `arg`
+    /// is found multiple times.
     pub fn check<'a>(&mut self, arg: Arg<Raisable>) -> Result<bool> {
         match ArgType::from(arg) {
             ArgType::Flag(fla) => self.check_flag(fla),
@@ -1037,6 +1058,14 @@ impl Cli<Memory> {
         }
     }
 
+    /// Returns the number of instances that `arg` exists.
+    /// 
+    /// - If `arg` is a flag, then it checks for all references of its associated name.
+    /// 
+    /// If `arg` is found, then the result is the number of times it is found.
+    /// If `arg` is not found, then the result is 0.
+    /// 
+    /// This function errors if a value is associated with an instances of `arg`.
     pub fn check_all<'a>(&mut self, arg: Arg<Raisable>) -> Result<usize> {
         match ArgType::from(arg) {
             ArgType::Flag(fla) => self.check_flag_all(fla),
@@ -1044,6 +1073,15 @@ impl Cli<Memory> {
         }
     }
 
+    /// Returns the number of instances that `arg` exists, up until an amount equal to `limit`.
+    /// 
+    /// - If `arg` is a flag, then it checks for all references of its associated name.
+    /// 
+    /// If `arg` is found, then the result is the number of times it is found.
+    /// If `arg` is not found, then the result is 0. The result is guaranteed to 
+    /// be between 0 and no more than `limit`.
+    /// 
+    /// This function errors if a value is associated with an instances of `arg`.
     pub fn check_until<'a>(&mut self, arg: Arg<Raisable>, limit: usize) -> Result<usize> {
         match ArgType::from(arg) {
             ArgType::Flag(fla) => self.check_flag_until(fla, limit),
@@ -1051,6 +1089,15 @@ impl Cli<Memory> {
         }
     }
 
+    /// Returns a single value associated with `arg`, if one exists.
+    /// 
+    /// - If `arg` is a positional argument, then it takes the next unnamed argument.
+    /// - If `arg` is an option argument, then it takes the value associated with its name.
+    /// 
+    /// If no value exists for `arg`, the result is `None`.
+    /// 
+    /// This function errors if parsing into type `T` fails or if the number of values found
+    /// is greater than 1.
     pub fn get<'a, T: FromStr>(&mut self, arg: Arg<Valuable>) -> Result<Option<T>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
@@ -1062,6 +1109,15 @@ impl Cli<Memory> {
         }
     }
 
+    /// Returns all values associated with `arg`, if they exist.
+    /// 
+    /// - If `arg` is a positional argument, then it takes all the following unnamed arguments.
+    /// - If `arg` is an option argument, then it takes all the values associated with its name.
+    /// 
+    /// If no values exists for `arg`, the result is `None`. If values do exist,
+    /// then the resulting vector is guaranteed to have `1 <= len()`.
+    /// 
+    /// This function errors if parsing into type `T` fails.
     pub fn get_all<'a, T: FromStr>(&mut self, arg: Arg<Valuable>) -> Result<Option<Vec<T>>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
@@ -1073,6 +1129,16 @@ impl Cli<Memory> {
         }
     }
 
+    /// Returns all values associated with `arg` up until an amount equal to `limit`, if they exist.
+    /// 
+    /// - If `arg` is a positional argument, then it takes all remaining unnamed arguments up until `limit`.  
+    /// - If `arg` is an option argument, then it takes an arbitrary amount of values associated with its name up until `limit`.
+    /// 
+    /// If no values exists for `arg`, the result is `None`. If values do exist,
+    /// then the resulting vector is guaranteed to have `1 <= len() <= limit`.
+    /// 
+    /// This function errors if parsing into type `T` fails or if the number of 
+    /// values found exceeds the specified `limit`.
     pub fn get_until<'a, T: FromStr>(
         &mut self,
         arg: Arg<Valuable>,
@@ -1088,6 +1154,13 @@ impl Cli<Memory> {
         }
     }
 
+    /// Returns a single value associated with `arg`.
+    /// 
+    /// - If `arg` is a positional argument, then it takes the next unnamed argument.
+    /// - If `arg` is an option argument, then it takes the value associated with its name.
+    /// 
+    /// This function errors if parsing into type `T` fails or if the number of values found
+    /// is not exactly equal to 1.
     pub fn require<'a, T: FromStr>(&mut self, arg: Arg<Valuable>) -> Result<T>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
@@ -1099,6 +1172,14 @@ impl Cli<Memory> {
         }
     }
 
+    /// Returns all values associated with `arg`.
+    /// 
+    /// - If `arg` is a positional argument, then it takes all remaining unnamed arguments.  
+    /// - If `arg` is an option argument, then it takes an arbitrary amount of values associated with its name.
+    /// 
+    /// This function errors if parsing into type `T` fails or if zero values are found.
+    ///
+    /// The resulting vector is guaranteed to have `1 <= len()`.
     pub fn require_all<'a, T: FromStr>(&mut self, arg: Arg<Valuable>) -> Result<Vec<T>>
     where
         <T as FromStr>::Err: 'static + std::error::Error,
@@ -1110,6 +1191,15 @@ impl Cli<Memory> {
         }
     }
 
+    /// Returns all values associated with `arg` up until an amount equal to `limit`.
+    /// 
+    /// - If `arg` is a positional argument, then it takes all remaining unnamed arguments up until `limit`.  
+    /// - If `arg` is an option argument, then it takes an arbitrary amount of values associated with its name up until `limit`.
+    /// 
+    /// This function errors if parsing into type `T` fails, if zero values are found, or
+    /// if the number of values found exceeds the specified `limit`.
+    ///
+    /// The resulting vector is guaranteed to have `1 <= len() <= limit`.
     pub fn require_until<'a, T: FromStr>(
         &mut self,
         arg: Arg<Valuable>,
@@ -1125,9 +1215,11 @@ impl Cli<Memory> {
         }
     }
 
-    /// Verifies there are no more tokens remaining in the stream.
-    ///
-    /// Note this mutates the referenced self only if an error is found.
+    /// Checks that there are no more unprocessed arguments that were stored in
+    /// memory.
+    /// 
+    /// This function errors if there are any unhandled arguments that were never
+    /// requested during the [Memory] stage.
     pub fn is_empty<'a>(&'a mut self) -> Result<()> {
         self.state.proceed(MemoryState::End);
         self.try_to_help()?;
@@ -1161,10 +1253,13 @@ impl Cli<Memory> {
         }
     }
 
-    /// Removes the ignored tokens from the stream, if they exist.
-    ///
-    /// Errors if an `AttachedArg` is found (could only be immediately after terminator)
-    /// after the terminator.
+    /// Collects the list of arguments that were ignored due to being placed after
+    /// a terminator flag (`--`).
+    /// 
+    /// If there are no arguments that were ignored, the result is an empty list.
+    /// 
+    /// This function errors if a value is found to be associated with the terminator
+    /// flag.
     pub fn remainder(&mut self) -> Result<Vec<String>> {
         self.tokens
             .iter_mut()
