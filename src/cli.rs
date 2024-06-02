@@ -8,6 +8,7 @@ use stage::*;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::marker::PhantomData;
+use std::ops::RangeBounds;
 use std::process::ExitCode;
 use std::str::FromStr;
 
@@ -122,7 +123,7 @@ impl MemoryState {
     pub fn proceed(&mut self, mut next: MemoryState) {
         // panic if we are already advanced past the next state
         if self > &mut next {
-            panic!("{}: argument discovery is in an invalid order: invalid state transition from {:?} to {:?}", "panic!".red().bold().underline(), self, next)
+            panic!("{}: argument discovery is in an invalid order: invalid state transition from {:?} to {:?}", "structural hazard".red().bold().underline(), self, next)
         }
         // println!("{:?} -> {:?}", self, next);
         *self = next;
@@ -681,6 +682,17 @@ impl Cli<Memory> {
         }
     }
 
+    pub fn check_between<'a, R: RangeBounds<usize>>(
+        &mut self,
+        arg: Arg<Raisable>,
+        span: R,
+    ) -> Result<usize> {
+        match ArgType::from(arg) {
+            ArgType::Flag(fla) => self.check_flag_between(fla, span),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
     /// Returns a single value associated with `arg`, if one exists.
     ///
     /// - If `arg` is a positional argument, then it takes the next unnamed argument.
@@ -746,6 +758,21 @@ impl Cli<Memory> {
         }
     }
 
+    pub fn get_between<'a, T: FromStr, R: RangeBounds<usize>>(
+        &mut self,
+        arg: Arg<Valuable>,
+        span: R,
+    ) -> Result<Option<Vec<T>>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        match ArgType::from(arg) {
+            ArgType::Optional(opt) => self.get_option_between(opt, span),
+            ArgType::Positional(pos) => self.get_positional_between(pos, span),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
     /// Returns a single value associated with `arg`.
     ///
     /// - If `arg` is a positional argument, then it takes the next unnamed argument.
@@ -803,6 +830,21 @@ impl Cli<Memory> {
         match ArgType::from(arg) {
             ArgType::Optional(opt) => self.require_option_until(opt, limit),
             ArgType::Positional(pos) => self.require_positional_until(pos, limit),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    pub fn require_between<'a, T: FromStr, R: RangeBounds<usize>>(
+        &mut self,
+        arg: Arg<Valuable>,
+        span: R,
+    ) -> Result<Vec<T>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        match ArgType::from(arg) {
+            ArgType::Optional(opt) => self.require_option_between(opt, span),
+            ArgType::Positional(pos) => self.require_positional_between(pos, span),
             _ => panic!("impossible code condition"),
         }
     }
@@ -940,6 +982,36 @@ impl Cli<Memory> {
         }
     }
 
+    fn get_positional_between<'a, T: FromStr, R: RangeBounds<usize>>(
+        &mut self,
+        p: Positional,
+        span: R,
+    ) -> Result<Option<Vec<T>>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(MemoryState::ProcessingPositionals);
+        let values = self.get_positional_all::<T>(p)?;
+        match values {
+            // verify the size of the vector does not exceed `n`
+            Some(r) => match span.contains(&r.len()) {
+                true => Ok(Some(r)),
+                false => Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::OutsideRange,
+                    ErrorContext::OutsideRange(
+                        self.known_args.pop().unwrap(),
+                        r.len(),
+                        span.start_bound().cloned(),
+                        span.end_bound().cloned(),
+                    ),
+                    self.options.cap_mode,
+                )),
+            },
+            None => Ok(None),
+        }
+    }
+
     /// Forces the next [Positional] to exist from token stream.
     ///
     /// Errors if parsing fails or if no unattached argument is left in the token stream.
@@ -1000,6 +1072,32 @@ impl Cli<Memory> {
                     self.known_args.pop().unwrap(),
                     values.len(),
                     limit,
+                ),
+                self.options.cap_mode,
+            )),
+        }
+    }
+
+    fn require_positional_between<'a, T: FromStr, R: RangeBounds<usize>>(
+        &mut self,
+        p: Positional,
+        span: R,
+    ) -> Result<Vec<T>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(MemoryState::ProcessingPositionals);
+        let values = self.require_positional_all::<T>(p)?;
+        match span.contains(&values.len()) {
+            true => Ok(values),
+            false => Err(Error::new(
+                self.help.clone(),
+                ErrorKind::OutsideRange,
+                ErrorContext::OutsideRange(
+                    self.known_args.pop().unwrap(),
+                    values.len(),
+                    span.start_bound().cloned(),
+                    span.end_bound().cloned(),
                 ),
                 self.options.cap_mode,
             )),
@@ -1146,6 +1244,36 @@ impl Cli<Memory> {
         }
     }
 
+    fn get_option_between<'a, T: FromStr, R: RangeBounds<usize>>(
+        &mut self,
+        o: Optional,
+        span: R,
+    ) -> Result<Option<Vec<T>>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(MemoryState::ProcessingOptionals);
+        let values = self.get_option_all::<T>(o)?;
+        match values {
+            // verify the size of the vector does not exceed `n`
+            Some(r) => match span.contains(&r.len()) {
+                true => Ok(Some(r)),
+                false => Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::OutsideRange,
+                    ErrorContext::OutsideRange(
+                        self.known_args.pop().unwrap(),
+                        r.len(),
+                        span.start_bound().cloned(),
+                        span.end_bound().cloned(),
+                    ),
+                    self.options.cap_mode,
+                )),
+            },
+            None => Ok(None),
+        }
+    }
+
     /// Queries for an expected value of `Optional`.
     fn require_option<'a, T: FromStr>(&mut self, o: Optional) -> Result<T>
     where
@@ -1201,6 +1329,32 @@ impl Cli<Memory> {
                     self.known_args.pop().unwrap(),
                     values.len(),
                     limit,
+                ),
+                self.options.cap_mode,
+            )),
+        }
+    }
+
+    fn require_option_between<'a, T: FromStr, R: RangeBounds<usize>>(
+        &mut self,
+        o: Optional,
+        span: R,
+    ) -> Result<Vec<T>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        self.state.proceed(MemoryState::ProcessingOptionals);
+        let values = self.require_option_all::<T>(o)?;
+        match span.contains(&values.len()) {
+            true => Ok(values),
+            false => Err(Error::new(
+                self.help.clone(),
+                ErrorKind::OutsideRange,
+                ErrorContext::OutsideRange(
+                    self.known_args.pop().unwrap(),
+                    values.len(),
+                    span.start_bound().cloned(),
+                    span.end_bound().cloned(),
                 ),
                 self.options.cap_mode,
             )),
@@ -1285,6 +1439,26 @@ impl Cli<Memory> {
                 self.help.clone(),
                 ErrorKind::ExceedingMaxCount,
                 ErrorContext::ExceededThreshold(self.known_args.pop().unwrap(), occurences, limit),
+                self.options.cap_mode,
+            )),
+        }
+    }
+
+    fn check_flag_between<'a, R: RangeBounds<usize>>(&mut self, f: Flag, span: R) -> Result<usize> {
+        self.state.proceed(MemoryState::ProcessingFlags);
+        let occurences = self.check_flag_all(f)?;
+        // verify the size of the vector does not exceed `n`
+        match span.contains(&occurences) {
+            true => Ok(occurences),
+            false => Err(Error::new(
+                self.help.clone(),
+                ErrorKind::OutsideRange,
+                ErrorContext::OutsideRange(
+                    self.known_args.pop().unwrap(),
+                    occurences,
+                    span.start_bound().cloned(),
+                    span.end_bound().cloned(),
+                ),
                 self.options.cap_mode,
             )),
         }

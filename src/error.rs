@@ -2,6 +2,7 @@ use crate::arg::ArgType;
 use crate::help::Help;
 use colored::Colorize;
 use std::fmt::Display;
+use std::ops::Bound::*;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ColorMode {
@@ -61,6 +62,8 @@ type Subcommand = String;
 type Suggestion = String;
 type MaxCount = usize;
 type CurCount = usize;
+type CurStart = std::ops::Bound<usize>;
+type CurEnd = std::ops::Bound<usize>;
 type SomeError = Box<dyn std::error::Error>;
 type Argument = String;
 
@@ -149,6 +152,7 @@ impl Error {
 #[allow(dead_code)]
 pub enum ErrorContext {
     ExceededThreshold(ArgType, CurCount, MaxCount),
+    OutsideRange(ArgType, CurCount, CurStart, CurEnd),
     FailedArg(ArgType),
     UnexpectedValue(ArgType, Value),
     FailedCast(ArgType, Value, SomeError),
@@ -177,6 +181,7 @@ pub enum ErrorKind {
     CustomRule,
     Help,
     ExceedingMaxCount,
+    OutsideRange,
 }
 
 impl std::error::Error for Error {}
@@ -206,11 +211,36 @@ pub mod utils {
             CapMode::Manual => s,
         }
     }
+
+    pub fn format_range(start: &CurStart, end: &CurEnd) -> String {
+        format!(
+            "{} and {}",
+            match start {
+                Included(i) => format!("{}", i),
+                Excluded(i) => format!("{}", i + 1),
+                Unbounded => usize::MIN.to_string(),
+            },
+            match end {
+                Included(i) => format!("{}", i),
+                Excluded(i) => format!("{}", i - 1),
+                Unbounded => usize::MAX.to_string(),
+            }
+        )
+    }
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self.context() {
+            ErrorContext::OutsideRange(arg, count, start, end) => {
+                write!(
+                    f,
+                    "option \"{}\" can be used between {} but was supplied {} times",
+                    arg.to_string().blue(),
+                    utils::format_range(start, end),
+                    count,
+                )
+            }
             ErrorContext::ExceededThreshold(arg, cur, max) => {
                 write!(
                     f,
