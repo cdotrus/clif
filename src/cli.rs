@@ -674,7 +674,8 @@ impl Cli<Memory> {
     /// If `arg` is not found, then the result is 0. The result is guaranteed to
     /// be between 0 and no more than `limit`.
     ///
-    /// This function errors if a value is associated with an instances of `arg`.
+    /// This function errors if a value is associated with an instances of `arg` or
+    /// if the number of flag instances exceeds the `limit`.
     pub fn check_until<'a>(&mut self, arg: Arg<Raisable>, limit: usize) -> Result<usize> {
         match ArgType::from(arg) {
             ArgType::Flag(fla) => self.check_flag_until(fla, limit),
@@ -682,6 +683,16 @@ impl Cli<Memory> {
         }
     }
 
+    /// Returns the number of instances that `arg` exists, between a range determined by `span`.
+    ///
+    /// - If `arg` is a flag, then it checks for all references of its associated name.
+    ///
+    /// If `arg` is found, then the result is the number of times it is found.
+    /// If `arg` is not found, then the result is 0. The result is guaranteed to
+    /// be 0 or a value contained in `span`.
+    ///
+    /// This function errors if a value is associated with an instances of `arg` or
+    /// if the number of flag instances is not contained within `span`.
     pub fn check_between<'a, R: RangeBounds<usize>>(
         &mut self,
         arg: Arg<Raisable>,
@@ -758,6 +769,16 @@ impl Cli<Memory> {
         }
     }
 
+    /// Returns all values associated with `arg` between a range determined by `span`, if they exist.
+    ///
+    /// - If `arg` is a positional argument, then it takes all remaining unnamed arguments contained in `span`.
+    /// - If `arg` is an option argument, then it takes an arbitrary amount of values associated with its name contained in `span`.
+    ///
+    /// If no values exists for `arg`, the result is `None`. If values do exist,
+    /// then the resulting vector is guaranteed to have `span.inclusive_start() <= len() <= span.inclusive_end()`.
+    ///
+    /// This function errors if parsing into type `T` fails or if the number of
+    /// values found is not contained within `span`.
     pub fn get_between<'a, T: FromStr, R: RangeBounds<usize>>(
         &mut self,
         arg: Arg<Valuable>,
@@ -834,6 +855,15 @@ impl Cli<Memory> {
         }
     }
 
+    /// Returns all values associated with `arg` between a range determined by `span`.
+    ///
+    /// - If `arg` is a positional argument, then it takes all remaining unnamed arguments contained in `span`.  
+    /// - If `arg` is an option argument, then it takes an arbitrary amount of values associated with its name contained in `span`.
+    ///
+    /// This function errors if parsing into type `T` fails or
+    /// if the number of values found is not contained within `span`.
+    ///
+    /// The resulting vector is guaranteed to have `1 <= len() <= limit`.
     pub fn require_between<'a, T: FromStr, R: RangeBounds<usize>>(
         &mut self,
         arg: Arg<Valuable>,
