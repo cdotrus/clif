@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0 - unreleased
+## 2.0.0
 
 ### Features
 - Enforces 3-stage processor design (Build, Ready, Memory) using typestate pattern
@@ -8,6 +8,7 @@
 - Refactors `Cli` API into much cleaner and more intuitive names
 - Refactors which modules and structs to expose to programmer
 - Refactors `Help` struct with cleaner API
+- Adds ability to specify a range for flags, options, and arguments
 
 ## 1.0.0
 
