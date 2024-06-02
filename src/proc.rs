@@ -9,10 +9,10 @@ pub trait Command: Sized {
     /// of command-line inputs (tokens) into the appropriate data fields.
     ///
     /// The _argument discovery order_ must be preserved and upheld by the programmer:
-    /// 1. `Flags`
-    /// 2. `Optionals`
-    /// 3. `Positionals`
-    /// 4. `Subcommands`
+    /// 1. Flags ([Arg::flag][super::Arg::flag])
+    /// 2. Options ([Arg::option][super::Arg::option])
+    /// 3. Positionals ([Arg::positional][super::Arg::positional])
+    /// 4. Subcommands ([Arg::subcommand][super::Arg::subcommand])
     ///
     /// Failure to map the appropriate data fields in the correct order according to
     /// the method in how they recieve their data from the command-line is considered
@@ -33,10 +33,10 @@ pub trait Subcommand<T>: Sized {
     /// of command-line inputs (tokens) into the appropriate data fields.
     ///
     /// The _argument discovery order_ must be preserved and upheld by the programmer:
-    /// 1. `Flags`
-    /// 2. `Optionals`
-    /// 3. `Positionals`
-    /// 4. `Subcommands`
+    /// 1. Flags ([Arg::flag][super::Arg::flag])
+    /// 2. Options ([Arg::option][super::Arg::option])
+    /// 3. Positionals ([Arg::positional][super::Arg::positional])
+    /// 4. Subcommands ([Arg::subcommand][super::Arg::subcommand])
     ///
     /// Failure to map the appropriate data fields in the correct order according to
     /// the method in how they recieve their data from the command-line is considered

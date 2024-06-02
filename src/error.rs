@@ -64,6 +64,7 @@ type CurCount = usize;
 type SomeError = Box<dyn std::error::Error>;
 type Argument = String;
 
+/// Errors related to command-line processing from [Cli][super::Cli].
 #[derive(Debug)]
 pub struct Error {
     context: ErrorContext,
@@ -84,7 +85,7 @@ impl From<Box<dyn std::error::Error>> for Error {
 }
 
 impl Error {
-    /// Creates a new error.
+    /// Creates a new command-line error.
     pub fn new(
         help: Option<Help>,
         kind: ErrorKind,
@@ -99,7 +100,7 @@ impl Error {
         }
     }
 
-    // Returns the kind of error.
+    // Returns the kind of command-line error.
     pub fn kind(&self) -> ErrorKind {
         self.kind
     }
@@ -117,18 +118,8 @@ impl Error {
         &self.context
     }
 
-    /// Constructs a simple help tip to insert into an error message if help exists.
-    fn help_tip(&self) -> Option<String> {
-        let flag_str = ArgType::from(self.help.as_ref()?.get_arg()).to_string();
-        Some(format!(
-            "{}For more information, try \"{}\".",
-            NEW_PARAGRAPH,
-            flag_str.green()
-        ))
-    }
-
     /// Transforms any error into a custom rule error to be used during [crate::Cli] parsing.
-    pub fn validate<U, E: std::error::Error + 'static>(rule: Result<U, E>) -> Result<U, Self> {
+    pub fn transform<U, E: std::error::Error + 'static>(rule: Result<U, E>) -> Result<U, Self> {
         match rule {
             Ok(t) => Ok(t),
             Err(e) => Err(Self::new(
@@ -141,6 +132,19 @@ impl Error {
     }
 }
 
+impl Error {
+    /// Constructs a simple help tip to insert into an error message if help exists.
+    fn help_tip(&self) -> Option<String> {
+        let flag_str = ArgType::from(self.help.as_ref()?.get_arg()).to_string();
+        Some(format!(
+            "{}For more information, try \"{}\".",
+            NEW_PARAGRAPH,
+            flag_str.green()
+        ))
+    }
+}
+
+/// The relevant information that produced the error during command-line processing from [Cli][super::Cli].
 #[derive(Debug)]
 #[allow(dead_code)]
 pub enum ErrorContext {
@@ -156,6 +160,7 @@ pub enum ErrorContext {
     Help,
 }
 
+/// The type of error that was produced during command-line processing from [Cli][super::Cli].
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum ErrorKind {
     BadType,
@@ -176,25 +181,30 @@ pub enum ErrorKind {
 
 impl std::error::Error for Error {}
 
-/// Capitalizes a sentence by converting the first character to uppercase (if possible).
-pub fn capitalize(s: String) -> String {
-    s.char_indices()
-        .map(|(i, c)| if i == 0 { c.to_ascii_uppercase() } else { c })
-        .collect()
-}
+pub mod utils {
+    use super::*;
 
-/// De-capitalizes a sentence by converting the first character to uppercase (if possible).
-pub fn lowerize(s: String) -> String {
-    s.char_indices()
-        .map(|(i, c)| if i == 0 { c.to_ascii_lowercase() } else { c })
-        .collect()
-}
+    /// Capitalizes a sentence by converting the first character to uppercase (if possible).
+    pub fn capitalize(s: String) -> String {
+        s.char_indices()
+            .map(|(i, c)| if i == 0 { c.to_ascii_uppercase() } else { c })
+            .collect()
+    }
 
-pub fn format_err_msg(s: String, cap_mode: CapMode) -> String {
-    match cap_mode {
-        CapMode::Upper => capitalize(s),
-        CapMode::Lower => lowerize(s),
-        CapMode::Manual => s,
+    /// De-capitalizes a sentence by converting the first character to uppercase (if possible).
+    pub fn lowerize(s: String) -> String {
+        s.char_indices()
+            .map(|(i, c)| if i == 0 { c.to_ascii_lowercase() } else { c })
+            .collect()
+    }
+
+    /// Decides how to write an error message depending on the captialization mode.
+    pub fn format_err_msg(s: String, cap_mode: CapMode) -> String {
+        match cap_mode {
+            CapMode::Upper => capitalize(s),
+            CapMode::Lower => lowerize(s),
+            CapMode::Manual => s,
+        }
     }
 }
 
@@ -223,7 +233,7 @@ impl Display for Error {
                     "argument \"{}\" failed to process value \"{}\": {}",
                     arg.to_string().blue(),
                     val.to_string().yellow(),
-                    format_err_msg(err.to_string(), self.cap_mode)
+                    utils::format_err_msg(err.to_string(), self.cap_mode)
                 )
             }
             ErrorContext::FailedArg(arg) => match self.kind() {
@@ -308,7 +318,11 @@ impl Display for Error {
                 )
             }
             ErrorContext::CustomRule(err) => {
-                write!(f, "{}", format_err_msg(err.to_string(), self.cap_mode))
+                write!(
+                    f,
+                    "{}",
+                    utils::format_err_msg(err.to_string(), self.cap_mode)
+                )
             }
         }?;
         Ok(())

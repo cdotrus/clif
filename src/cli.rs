@@ -1,4 +1,4 @@
-use crate::error::{self, CapMode, ColorMode};
+use crate::error::{utils, CapMode, ColorMode};
 use crate::help::Help;
 use crate::seqalin;
 use crate::seqalin::Cost;
@@ -134,12 +134,12 @@ impl MemoryState {
 }
 
 pub mod stage {
-    /// The typestate pattern for the different stages in processing data from 
+    /// The typestate pattern for the different stages in processing data from
     /// the command-line.
     pub trait ProcessorState {}
 
     /// The first stage in the command-line processor. The processor can be
-    /// configured when it is in this state. 
+    /// configured when it is in this state.
     pub struct Build;
 
     /// The second stage in the command-line processor. The processor can be
@@ -439,8 +439,8 @@ impl Cli<Ready> {
     /// 2. `T` executes its task
     ///
     /// This function will handle errors and report them to `stderr` if one
-    /// is encountered. If an error is encountered, the function returns 101 as 
-    /// the exit code. If no error is encountered, the function returns 0 as the 
+    /// is encountered. If an error is encountered, the function returns 101 as
+    /// the exit code. If no error is encountered, the function returns 0 as the
     /// exit code.
     pub fn go<T: Command>(self) -> ExitCode {
         let mut cli: Cli<Memory> = self.save();
@@ -459,7 +459,7 @@ impl Cli<Ready> {
                                 eprintln!(
                                     "{}{}{}",
                                     cli_opts.err_prefix,
-                                    error::format_err_msg(err.to_string(), cli_opts.cap_mode),
+                                    utils::format_err_msg(err.to_string(), cli_opts.cap_mode),
                                     cli_opts.err_suffix
                                 );
                                 ExitCode::from(101)
@@ -474,7 +474,7 @@ impl Cli<Ready> {
                             _ => eprintln!(
                                 "{}{}{}",
                                 cli_opts.err_prefix,
-                                error::format_err_msg(err.to_string(), cli_opts.cap_mode),
+                                utils::format_err_msg(err.to_string(), cli_opts.cap_mode),
                                 cli_opts.err_suffix
                             ),
                         }
@@ -490,7 +490,7 @@ impl Cli<Ready> {
                     _ => eprintln!(
                         "{}{}{}",
                         cli_opts.err_prefix,
-                        error::format_err_msg(err.to_string(), cli_opts.cap_mode),
+                        utils::format_err_msg(err.to_string(), cli_opts.cap_mode),
                         cli_opts.err_suffix
                     ),
                 }
@@ -503,6 +503,383 @@ impl Cli<Ready> {
     /// interpretation.
     pub fn save(self) -> Cli<Memory> {
         self.transition()
+    }
+}
+
+// Public API
+
+impl Cli<Memory> {
+    /// Sets the [Help] information for the command-line processor.
+    ///
+    /// Once the help information is updated, this function returns true if help
+    /// is detected on the command-line only if help is configured as a priority.
+    pub fn help(&mut self, help: Help) -> Result<bool> {
+        self.help = Some(help);
+        // check for flag if not already raised
+        if self.asking_for_help == false && self.is_help_enabled() == true {
+            self.asking_for_help = self.check(self.help.as_ref().unwrap().get_arg())?;
+        }
+        Ok(self.asking_for_help)
+    }
+
+    /// Attempts to display the currently available help information if help was
+    /// detected on the command-line.
+    pub fn raise_help(&self) -> Result<()> {
+        self.try_to_help()
+    }
+
+    /// Clears the status flag indicating if help was detected on the command-line
+    pub fn lower_help(&mut self) -> () {
+        self.asking_for_help = false;
+    }
+
+    /// Removes the current help information stored for the command-line processor.
+    pub fn unset_help(&mut self) -> () {
+        self.help = None;
+    }
+
+    /// Determines if an `UnattachedArg` exists to be served as a subcommand.
+    ///
+    /// If so, it will call `interpret` on the type defined. If not, it will return none.
+    pub fn nest<'a, T: Subcommand<U>, U>(
+        &mut self,
+        subcommand: Arg<Callable>,
+    ) -> Result<Option<T>> {
+        self.known_args.push(ArgType::from(subcommand));
+        // check but do not remove if an unattached arg exists
+        let command_exists = self
+            .tokens
+            .iter()
+            .find(|f| match f {
+                Some(Token::UnattachedArgument(_, _)) => true,
+                _ => false,
+            })
+            .is_some();
+        if command_exists == true {
+            // reset the parser state upon entering new subcommand
+            self.state = MemoryState::reset();
+            let sub = Some(T::interpret(self)?);
+            self.state.proceed(MemoryState::ProcessingSubcommands);
+            Ok(sub)
+        } else {
+            self.state.proceed(MemoryState::ProcessingSubcommands);
+            return Ok(None);
+        }
+    }
+
+    /// Tries to match the next positional argument against an array of strings in `bank`.
+    ///
+    /// If fails, it will attempt to offer a spelling suggestion if the name is close depending
+    /// on the configured cost threshold for string alignment.
+    ///
+    /// Panics if there is not a next positional argument. This command should only be
+    /// called immediately in the nested subcommand's [interpret][super::Command::interpret] method, which is
+    /// triggered on a successful call to the previous command's call to [nest][Cli::nest].
+    pub fn select<T: AsRef<str> + std::cmp::PartialEq>(&mut self, bank: &[T]) -> Result<String> {
+        // find the unattached arg's index before it is removed from the token stream
+        let i: usize = self
+            .tokens
+            .iter()
+            .find_map(|f| match f {
+                Some(Token::UnattachedArgument(i, _)) => Some(*i),
+                _ => None,
+            })
+            .expect("an unattached argument must exist before calling `match(...)`");
+        let command = self
+            .next_uarg()
+            .expect("`nest(...)` must be called before this function");
+
+        // perform partial clean to ensure no arguments are remaining behind the command (uncaught options)
+        let ooc_arg = self.capture_bad_flag(i)?;
+
+        if bank.iter().find(|p| p.as_ref() == command).is_some() {
+            if let Some((prefix, key, pos)) = ooc_arg {
+                if pos < i {
+                    self.try_to_help()?;
+                    return Err(Error::new(
+                        self.help.clone(),
+                        ErrorKind::OutOfContextArgSuggest,
+                        ErrorContext::OutofContextArgSuggest(format!("{}{}", prefix, key), command),
+                        self.options.cap_mode,
+                    ));
+                }
+            }
+            Ok(command)
+        // try to offer a spelling suggestion otherwise say we've hit an unexpected argument
+        } else {
+            // bypass sequence alignment algorithm if threshold == 0
+            if let Some(w) = if self.options.threshold > 0 {
+                seqalin::sel_min_edit_str(&command, &bank, self.options.threshold)
+            } else {
+                None
+            } {
+                Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::SuggestSubcommand,
+                    ErrorContext::SuggestWord(command, w.to_string()),
+                    self.options.cap_mode,
+                ))
+            } else {
+                self.try_to_help()?;
+                Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::UnknownSubcommand,
+                    ErrorContext::UnknownSubcommand(
+                        self.known_args.pop().expect("requires positional argument"),
+                        command,
+                    ),
+                    self.options.cap_mode,
+                ))
+            }
+        }
+    }
+
+    /// Returns the existence of `arg`.
+    ///
+    /// - If `arg` is a flag, then it checks for the associated name.
+    ///
+    /// If `arg` is found, then the result is `true`. If `arg` is not found, then
+    /// the result is `false`.
+    ///
+    /// This function errors if a value is associated with the `arg` or if the `arg`
+    /// is found multiple times.
+    pub fn check<'a>(&mut self, arg: Arg<Raisable>) -> Result<bool> {
+        match ArgType::from(arg) {
+            ArgType::Flag(fla) => self.check_flag(fla),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    /// Returns the number of instances that `arg` exists.
+    ///
+    /// - If `arg` is a flag, then it checks for all references of its associated name.
+    ///
+    /// If `arg` is found, then the result is the number of times it is found.
+    /// If `arg` is not found, then the result is 0.
+    ///
+    /// This function errors if a value is associated with an instances of `arg`.
+    pub fn check_all<'a>(&mut self, arg: Arg<Raisable>) -> Result<usize> {
+        match ArgType::from(arg) {
+            ArgType::Flag(fla) => self.check_flag_all(fla),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    /// Returns the number of instances that `arg` exists, up until an amount equal to `limit`.
+    ///
+    /// - If `arg` is a flag, then it checks for all references of its associated name.
+    ///
+    /// If `arg` is found, then the result is the number of times it is found.
+    /// If `arg` is not found, then the result is 0. The result is guaranteed to
+    /// be between 0 and no more than `limit`.
+    ///
+    /// This function errors if a value is associated with an instances of `arg`.
+    pub fn check_until<'a>(&mut self, arg: Arg<Raisable>, limit: usize) -> Result<usize> {
+        match ArgType::from(arg) {
+            ArgType::Flag(fla) => self.check_flag_until(fla, limit),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    /// Returns a single value associated with `arg`, if one exists.
+    ///
+    /// - If `arg` is a positional argument, then it takes the next unnamed argument.
+    /// - If `arg` is an option argument, then it takes the value associated with its name.
+    ///
+    /// If no value exists for `arg`, the result is `None`.
+    ///
+    /// This function errors if parsing into type `T` fails or if the number of values found
+    /// is greater than 1.
+    pub fn get<'a, T: FromStr>(&mut self, arg: Arg<Valuable>) -> Result<Option<T>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        match ArgType::from(arg) {
+            ArgType::Optional(opt) => self.get_option(opt),
+            ArgType::Positional(pos) => self.get_positional(pos),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    /// Returns all values associated with `arg`, if they exist.
+    ///
+    /// - If `arg` is a positional argument, then it takes all the following unnamed arguments.
+    /// - If `arg` is an option argument, then it takes all the values associated with its name.
+    ///
+    /// If no values exists for `arg`, the result is `None`. If values do exist,
+    /// then the resulting vector is guaranteed to have `1 <= len()`.
+    ///
+    /// This function errors if parsing into type `T` fails.
+    pub fn get_all<'a, T: FromStr>(&mut self, arg: Arg<Valuable>) -> Result<Option<Vec<T>>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        match ArgType::from(arg) {
+            ArgType::Optional(opt) => self.get_option_all(opt),
+            ArgType::Positional(pos) => self.get_positional_all(pos),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    /// Returns all values associated with `arg` up until an amount equal to `limit`, if they exist.
+    ///
+    /// - If `arg` is a positional argument, then it takes all remaining unnamed arguments up until `limit`.  
+    /// - If `arg` is an option argument, then it takes an arbitrary amount of values associated with its name up until `limit`.
+    ///
+    /// If no values exists for `arg`, the result is `None`. If values do exist,
+    /// then the resulting vector is guaranteed to have `1 <= len() <= limit`.
+    ///
+    /// This function errors if parsing into type `T` fails or if the number of
+    /// values found exceeds the specified `limit`.
+    pub fn get_until<'a, T: FromStr>(
+        &mut self,
+        arg: Arg<Valuable>,
+        limit: usize,
+    ) -> Result<Option<Vec<T>>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        match ArgType::from(arg) {
+            ArgType::Optional(opt) => self.get_option_until(opt, limit),
+            ArgType::Positional(pos) => self.get_positional_until(pos, limit),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    /// Returns a single value associated with `arg`.
+    ///
+    /// - If `arg` is a positional argument, then it takes the next unnamed argument.
+    /// - If `arg` is an option argument, then it takes the value associated with its name.
+    ///
+    /// This function errors if parsing into type `T` fails or if the number of values found
+    /// is not exactly equal to 1.
+    pub fn require<'a, T: FromStr>(&mut self, arg: Arg<Valuable>) -> Result<T>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        match ArgType::from(arg) {
+            ArgType::Optional(opt) => self.require_option(opt),
+            ArgType::Positional(pos) => self.require_positional(pos),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    /// Returns all values associated with `arg`.
+    ///
+    /// - If `arg` is a positional argument, then it takes all remaining unnamed arguments.  
+    /// - If `arg` is an option argument, then it takes an arbitrary amount of values associated with its name.
+    ///
+    /// This function errors if parsing into type `T` fails or if zero values are found.
+    ///
+    /// The resulting vector is guaranteed to have `1 <= len()`.
+    pub fn require_all<'a, T: FromStr>(&mut self, arg: Arg<Valuable>) -> Result<Vec<T>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        match ArgType::from(arg) {
+            ArgType::Optional(opt) => self.require_option_all(opt),
+            ArgType::Positional(pos) => self.require_positional_all(pos),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    /// Returns all values associated with `arg` up until an amount equal to `limit`.
+    ///
+    /// - If `arg` is a positional argument, then it takes all remaining unnamed arguments up until `limit`.  
+    /// - If `arg` is an option argument, then it takes an arbitrary amount of values associated with its name up until `limit`.
+    ///
+    /// This function errors if parsing into type `T` fails, if zero values are found, or
+    /// if the number of values found exceeds the specified `limit`.
+    ///
+    /// The resulting vector is guaranteed to have `1 <= len() <= limit`.
+    pub fn require_until<'a, T: FromStr>(
+        &mut self,
+        arg: Arg<Valuable>,
+        limit: usize,
+    ) -> Result<Vec<T>>
+    where
+        <T as FromStr>::Err: 'static + std::error::Error,
+    {
+        match ArgType::from(arg) {
+            ArgType::Optional(opt) => self.require_option_until(opt, limit),
+            ArgType::Positional(pos) => self.require_positional_until(pos, limit),
+            _ => panic!("impossible code condition"),
+        }
+    }
+
+    /// Checks that there are no more unprocessed arguments that were stored in
+    /// memory.
+    ///
+    /// This function errors if there are any unhandled arguments that were never
+    /// requested during the [Memory] stage.
+    pub fn is_empty<'a>(&'a mut self) -> Result<()> {
+        self.state.proceed(MemoryState::End);
+        self.try_to_help()?;
+        // check if map is empty, and return the minimum found index.
+        if let Some((prefix, key, _)) = self.capture_bad_flag(self.tokens.len())? {
+            Err(Error::new(
+                self.help.clone(),
+                ErrorKind::UnexpectedArg,
+                ErrorContext::UnexpectedArg(format!("{}{}", prefix, key)),
+                self.options.cap_mode,
+            ))
+        // find first non-none token
+        } else if let Some(t) = self.tokens.iter().find(|p| p.is_some()) {
+            match t {
+                Some(Token::UnattachedArgument(_, word)) => Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::UnexpectedArg,
+                    ErrorContext::UnexpectedArg(word.to_string()),
+                    self.options.cap_mode,
+                )),
+                Some(Token::Terminator(_)) => Err(Error::new(
+                    self.help.clone(),
+                    ErrorKind::UnexpectedArg,
+                    ErrorContext::UnexpectedArg(symbol::FLAG.to_string()),
+                    self.options.cap_mode,
+                )),
+                _ => panic!("no other tokens types should be left"),
+            }
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Collects the list of arguments that were ignored due to being placed after
+    /// a terminator flag (`--`).
+    ///
+    /// If there are no arguments that were ignored, the result is an empty list.
+    ///
+    /// This function errors if a value is found to be associated with the terminator
+    /// flag.
+    pub fn remainder(&mut self) -> Result<Vec<String>> {
+        self.tokens
+            .iter_mut()
+            .skip_while(|tkn| match tkn {
+                Some(Token::Terminator(_)) => false,
+                _ => true,
+            })
+            .filter_map(|tkn| {
+                match tkn {
+                    // remove the terminator from the stream
+                    Some(Token::Terminator(_)) => {
+                        tkn.take().unwrap();
+                        None
+                    }
+                    Some(Token::Ignore(_, _)) => Some(Ok(tkn.take().unwrap().take_str())),
+                    Some(Token::AttachedArgument(_, _)) => Some(Err(Error::new(
+                        self.help.clone(),
+                        ErrorKind::UnexpectedValue,
+                        ErrorContext::UnexpectedValue(
+                            ArgType::Flag(Flag::new("")),
+                            tkn.take().unwrap().take_str(),
+                        ),
+                        self.options.cap_mode,
+                    ))),
+                    _ => panic!("no other tokens should exist beyond terminator {:?}", tkn),
+                }
+            })
+            .collect()
     }
 }
 
@@ -914,384 +1291,8 @@ impl Cli<Memory> {
     }
 }
 
-// Public API
-
-impl Cli<Memory> {
-    /// Sets the [Help] information for the command-line processor.
-    ///
-    /// Once the help information is updated, this function returns true if help
-    /// is detected on the command-line only if help is configured as a priority.
-    pub fn help(&mut self, help: Help) -> Result<bool> {
-        self.help = Some(help);
-        // check for flag if not already raised
-        if self.asking_for_help == false && self.is_help_enabled() == true {
-            self.asking_for_help = self.check(self.help.as_ref().unwrap().get_arg())?;
-        }
-        Ok(self.asking_for_help)
-    }
-
-    /// Attempts to display the currently available help information if help was
-    /// detected on the command-line.
-    pub fn raise_help(&self) -> Result<()> {
-        self.try_to_help()
-    }
-
-    /// Clears the status flag indicating if help was detected on the command-line
-    pub fn lower_help(&mut self) -> () {
-        self.asking_for_help = false;
-    }
-
-    /// Removes the current help information stored for the command-line processor.
-    pub fn unset_help(&mut self) -> () {
-        self.help = None;
-    }
-
-    /// Determines if an `UnattachedArg` exists to be served as a subcommand.
-    ///
-    /// If so, it will call `interpret` on the type defined. If not, it will return none.
-    pub fn nest<'a, T: Subcommand<U>, U>(
-        &mut self,
-        subcommand: Arg<Callable>,
-    ) -> Result<Option<T>> {
-        self.known_args.push(ArgType::from(subcommand));
-        // check but do not remove if an unattached arg exists
-        let command_exists = self
-            .tokens
-            .iter()
-            .find(|f| match f {
-                Some(Token::UnattachedArgument(_, _)) => true,
-                _ => false,
-            })
-            .is_some();
-        if command_exists == true {
-            // reset the parser state upon entering new subcommand
-            self.state = MemoryState::reset();
-            let sub = Some(T::interpret(self)?);
-            self.state.proceed(MemoryState::ProcessingSubcommands);
-            Ok(sub)
-        } else {
-            self.state.proceed(MemoryState::ProcessingSubcommands);
-            return Ok(None);
-        }
-    }
-
-    /// Tries to match the next positional argument against an array of strings in `bank`.
-    ///
-    /// If fails, it will attempt to offer a spelling suggestion if the name is close depending
-    /// on the configured cost threshold for string alignment.
-    ///
-    /// Panics if there is not a next positional argument. This command should only be
-    /// called immediately in the nested subcommand's `interpret(...)` method, which is
-    /// triggered on a successful call to the previous command's call to `nest(...)`.
-    pub fn select<T: AsRef<str> + std::cmp::PartialEq>(&mut self, bank: &[T]) -> Result<String> {
-        // find the unattached arg's index before it is removed from the token stream
-        let i: usize = self
-            .tokens
-            .iter()
-            .find_map(|f| match f {
-                Some(Token::UnattachedArgument(i, _)) => Some(*i),
-                _ => None,
-            })
-            .expect("an unattached argument must exist before calling `match(...)`");
-        let command = self
-            .next_uarg()
-            .expect("`nest(...)` must be called before this function");
-
-        // perform partial clean to ensure no arguments are remaining behind the command (uncaught options)
-        let ooc_arg = self.capture_bad_flag(i)?;
-
-        if bank.iter().find(|p| p.as_ref() == command).is_some() {
-            if let Some((prefix, key, pos)) = ooc_arg {
-                if pos < i {
-                    self.try_to_help()?;
-                    return Err(Error::new(
-                        self.help.clone(),
-                        ErrorKind::OutOfContextArgSuggest,
-                        ErrorContext::OutofContextArgSuggest(format!("{}{}", prefix, key), command),
-                        self.options.cap_mode,
-                    ));
-                }
-            }
-            Ok(command)
-        // try to offer a spelling suggestion otherwise say we've hit an unexpected argument
-        } else {
-            // bypass sequence alignment algorithm if threshold == 0
-            if let Some(w) = if self.options.threshold > 0 {
-                seqalin::sel_min_edit_str(&command, &bank, self.options.threshold)
-            } else {
-                None
-            } {
-                Err(Error::new(
-                    self.help.clone(),
-                    ErrorKind::SuggestSubcommand,
-                    ErrorContext::SuggestWord(command, w.to_string()),
-                    self.options.cap_mode,
-                ))
-            } else {
-                self.try_to_help()?;
-                Err(Error::new(
-                    self.help.clone(),
-                    ErrorKind::UnknownSubcommand,
-                    ErrorContext::UnknownSubcommand(
-                        self.known_args.pop().expect("requires positional argument"),
-                        command,
-                    ),
-                    self.options.cap_mode,
-                ))
-            }
-        }
-    }
-
-    /// Returns the existence of `arg`.
-    /// 
-    /// - If `arg` is a flag, then it checks for the associated name.
-    /// 
-    /// If `arg` is found, then the result is `true`. If `arg` is not found, then 
-    /// the result is `false`. 
-    /// 
-    /// This function errors if a value is associated with the `arg` or if the `arg`
-    /// is found multiple times.
-    pub fn check<'a>(&mut self, arg: Arg<Raisable>) -> Result<bool> {
-        match ArgType::from(arg) {
-            ArgType::Flag(fla) => self.check_flag(fla),
-            _ => panic!("impossible code condition"),
-        }
-    }
-
-    /// Returns the number of instances that `arg` exists.
-    /// 
-    /// - If `arg` is a flag, then it checks for all references of its associated name.
-    /// 
-    /// If `arg` is found, then the result is the number of times it is found.
-    /// If `arg` is not found, then the result is 0.
-    /// 
-    /// This function errors if a value is associated with an instances of `arg`.
-    pub fn check_all<'a>(&mut self, arg: Arg<Raisable>) -> Result<usize> {
-        match ArgType::from(arg) {
-            ArgType::Flag(fla) => self.check_flag_all(fla),
-            _ => panic!("impossible code condition"),
-        }
-    }
-
-    /// Returns the number of instances that `arg` exists, up until an amount equal to `limit`.
-    /// 
-    /// - If `arg` is a flag, then it checks for all references of its associated name.
-    /// 
-    /// If `arg` is found, then the result is the number of times it is found.
-    /// If `arg` is not found, then the result is 0. The result is guaranteed to 
-    /// be between 0 and no more than `limit`.
-    /// 
-    /// This function errors if a value is associated with an instances of `arg`.
-    pub fn check_until<'a>(&mut self, arg: Arg<Raisable>, limit: usize) -> Result<usize> {
-        match ArgType::from(arg) {
-            ArgType::Flag(fla) => self.check_flag_until(fla, limit),
-            _ => panic!("impossible code condition"),
-        }
-    }
-
-    /// Returns a single value associated with `arg`, if one exists.
-    /// 
-    /// - If `arg` is a positional argument, then it takes the next unnamed argument.
-    /// - If `arg` is an option argument, then it takes the value associated with its name.
-    /// 
-    /// If no value exists for `arg`, the result is `None`.
-    /// 
-    /// This function errors if parsing into type `T` fails or if the number of values found
-    /// is greater than 1.
-    pub fn get<'a, T: FromStr>(&mut self, arg: Arg<Valuable>) -> Result<Option<T>>
-    where
-        <T as FromStr>::Err: 'static + std::error::Error,
-    {
-        match ArgType::from(arg) {
-            ArgType::Optional(opt) => self.get_option(opt),
-            ArgType::Positional(pos) => self.get_positional(pos),
-            _ => panic!("impossible code condition"),
-        }
-    }
-
-    /// Returns all values associated with `arg`, if they exist.
-    /// 
-    /// - If `arg` is a positional argument, then it takes all the following unnamed arguments.
-    /// - If `arg` is an option argument, then it takes all the values associated with its name.
-    /// 
-    /// If no values exists for `arg`, the result is `None`. If values do exist,
-    /// then the resulting vector is guaranteed to have `1 <= len()`.
-    /// 
-    /// This function errors if parsing into type `T` fails.
-    pub fn get_all<'a, T: FromStr>(&mut self, arg: Arg<Valuable>) -> Result<Option<Vec<T>>>
-    where
-        <T as FromStr>::Err: 'static + std::error::Error,
-    {
-        match ArgType::from(arg) {
-            ArgType::Optional(opt) => self.get_option_all(opt),
-            ArgType::Positional(pos) => self.get_positional_all(pos),
-            _ => panic!("impossible code condition"),
-        }
-    }
-
-    /// Returns all values associated with `arg` up until an amount equal to `limit`, if they exist.
-    /// 
-    /// - If `arg` is a positional argument, then it takes all remaining unnamed arguments up until `limit`.  
-    /// - If `arg` is an option argument, then it takes an arbitrary amount of values associated with its name up until `limit`.
-    /// 
-    /// If no values exists for `arg`, the result is `None`. If values do exist,
-    /// then the resulting vector is guaranteed to have `1 <= len() <= limit`.
-    /// 
-    /// This function errors if parsing into type `T` fails or if the number of 
-    /// values found exceeds the specified `limit`.
-    pub fn get_until<'a, T: FromStr>(
-        &mut self,
-        arg: Arg<Valuable>,
-        limit: usize,
-    ) -> Result<Option<Vec<T>>>
-    where
-        <T as FromStr>::Err: 'static + std::error::Error,
-    {
-        match ArgType::from(arg) {
-            ArgType::Optional(opt) => self.get_option_until(opt, limit),
-            ArgType::Positional(pos) => self.get_positional_until(pos, limit),
-            _ => panic!("impossible code condition"),
-        }
-    }
-
-    /// Returns a single value associated with `arg`.
-    /// 
-    /// - If `arg` is a positional argument, then it takes the next unnamed argument.
-    /// - If `arg` is an option argument, then it takes the value associated with its name.
-    /// 
-    /// This function errors if parsing into type `T` fails or if the number of values found
-    /// is not exactly equal to 1.
-    pub fn require<'a, T: FromStr>(&mut self, arg: Arg<Valuable>) -> Result<T>
-    where
-        <T as FromStr>::Err: 'static + std::error::Error,
-    {
-        match ArgType::from(arg) {
-            ArgType::Optional(opt) => self.require_option(opt),
-            ArgType::Positional(pos) => self.require_positional(pos),
-            _ => panic!("impossible code condition"),
-        }
-    }
-
-    /// Returns all values associated with `arg`.
-    /// 
-    /// - If `arg` is a positional argument, then it takes all remaining unnamed arguments.  
-    /// - If `arg` is an option argument, then it takes an arbitrary amount of values associated with its name.
-    /// 
-    /// This function errors if parsing into type `T` fails or if zero values are found.
-    ///
-    /// The resulting vector is guaranteed to have `1 <= len()`.
-    pub fn require_all<'a, T: FromStr>(&mut self, arg: Arg<Valuable>) -> Result<Vec<T>>
-    where
-        <T as FromStr>::Err: 'static + std::error::Error,
-    {
-        match ArgType::from(arg) {
-            ArgType::Optional(opt) => self.require_option_all(opt),
-            ArgType::Positional(pos) => self.require_positional_all(pos),
-            _ => panic!("impossible code condition"),
-        }
-    }
-
-    /// Returns all values associated with `arg` up until an amount equal to `limit`.
-    /// 
-    /// - If `arg` is a positional argument, then it takes all remaining unnamed arguments up until `limit`.  
-    /// - If `arg` is an option argument, then it takes an arbitrary amount of values associated with its name up until `limit`.
-    /// 
-    /// This function errors if parsing into type `T` fails, if zero values are found, or
-    /// if the number of values found exceeds the specified `limit`.
-    ///
-    /// The resulting vector is guaranteed to have `1 <= len() <= limit`.
-    pub fn require_until<'a, T: FromStr>(
-        &mut self,
-        arg: Arg<Valuable>,
-        limit: usize,
-    ) -> Result<Vec<T>>
-    where
-        <T as FromStr>::Err: 'static + std::error::Error,
-    {
-        match ArgType::from(arg) {
-            ArgType::Optional(opt) => self.require_option_until(opt, limit),
-            ArgType::Positional(pos) => self.require_positional_until(pos, limit),
-            _ => panic!("impossible code condition"),
-        }
-    }
-
-    /// Checks that there are no more unprocessed arguments that were stored in
-    /// memory.
-    /// 
-    /// This function errors if there are any unhandled arguments that were never
-    /// requested during the [Memory] stage.
-    pub fn is_empty<'a>(&'a mut self) -> Result<()> {
-        self.state.proceed(MemoryState::End);
-        self.try_to_help()?;
-        // check if map is empty, and return the minimum found index.
-        if let Some((prefix, key, _)) = self.capture_bad_flag(self.tokens.len())? {
-            Err(Error::new(
-                self.help.clone(),
-                ErrorKind::UnexpectedArg,
-                ErrorContext::UnexpectedArg(format!("{}{}", prefix, key)),
-                self.options.cap_mode,
-            ))
-        // find first non-none token
-        } else if let Some(t) = self.tokens.iter().find(|p| p.is_some()) {
-            match t {
-                Some(Token::UnattachedArgument(_, word)) => Err(Error::new(
-                    self.help.clone(),
-                    ErrorKind::UnexpectedArg,
-                    ErrorContext::UnexpectedArg(word.to_string()),
-                    self.options.cap_mode,
-                )),
-                Some(Token::Terminator(_)) => Err(Error::new(
-                    self.help.clone(),
-                    ErrorKind::UnexpectedArg,
-                    ErrorContext::UnexpectedArg(symbol::FLAG.to_string()),
-                    self.options.cap_mode,
-                )),
-                _ => panic!("no other tokens types should be left"),
-            }
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Collects the list of arguments that were ignored due to being placed after
-    /// a terminator flag (`--`).
-    /// 
-    /// If there are no arguments that were ignored, the result is an empty list.
-    /// 
-    /// This function errors if a value is found to be associated with the terminator
-    /// flag.
-    pub fn remainder(&mut self) -> Result<Vec<String>> {
-        self.tokens
-            .iter_mut()
-            .skip_while(|tkn| match tkn {
-                Some(Token::Terminator(_)) => false,
-                _ => true,
-            })
-            .filter_map(|tkn| {
-                match tkn {
-                    // remove the terminator from the stream
-                    Some(Token::Terminator(_)) => {
-                        tkn.take().unwrap();
-                        None
-                    }
-                    Some(Token::Ignore(_, _)) => Some(Ok(tkn.take().unwrap().take_str())),
-                    Some(Token::AttachedArgument(_, _)) => Some(Err(Error::new(
-                        self.help.clone(),
-                        ErrorKind::UnexpectedValue,
-                        ErrorContext::UnexpectedValue(
-                            ArgType::Flag(Flag::new("")),
-                            tkn.take().unwrap().take_str(),
-                        ),
-                        self.options.cap_mode,
-                    ))),
-                    _ => panic!("no other tokens should exist beyond terminator {:?}", tkn),
-                }
-            })
-            .collect()
-    }
-}
-
 // Internal methods
+
 impl Cli<Memory> {
     /// Attempts to extract the next unattached argument to get a positional with valid parsing.
     ///
