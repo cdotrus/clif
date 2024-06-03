@@ -1,4 +1,4 @@
-use cliproc::{cli, proc, stage::*};
+use cliproc::{cli, proc, stage::Memory};
 use cliproc::{Arg, Cli, Command, ExitCode, Help};
 use std::env;
 
