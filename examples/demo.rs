@@ -1,5 +1,5 @@
-use cliproc::{cli, proc};
-use cliproc::{stage::Memory, Arg, Cli, Command, ExitCode, Help};
+use cliproc::{cli, proc, stage::*};
+use cliproc::{Arg, Cli, Command, ExitCode, Help};
 use std::env;
 
 // 1. Define the struct and the data required to perform its task

@@ -12,8 +12,8 @@ cliproc = "2.0.0"
 ## Example
 
 ``` rust
-use cliproc::{cli, proc};
-use cliproc::{stage::Memory, Arg, Cli, Command, ExitCode, Help};
+use cliproc::{cli, proc, stage::*};
+use cliproc::{Arg, Cli, Command, ExitCode, Help};
 use std::env;
 
 // 1. Define the struct and the data required to perform its task
@@ -85,7 +85,7 @@ At the ready stage, the processor has two choices: _go_ or _save_:
 
 The raw vector of strings received from the command-line is processed by translating the strings into tokens to be interpreted by a struct implementing the `Command` trait.
 
-Any struct can be function as a command/subcommand as along as:
+Any struct can function as a command/subcommand as along as:
 1. Each field's type in the struct implements the standard library's [`std::str::FromStr`](https://doc.rust-lang.org/std/str/trait.FromStr.html) trait.
 2. The struct implements `cliproc`'s [`Command`](./src/proc.rs) (or [`Subcommand`](./src/proc.rs)) trait.
 
