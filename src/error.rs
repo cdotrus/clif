@@ -235,7 +235,7 @@ impl Display for Error {
             ErrorContext::OutsideRange(arg, count, start, end) => {
                 write!(
                     f,
-                    "option \"{}\" can be used between {} but was supplied {} times",
+                    "option \"{}\" can be used between {} times but was supplied {} times",
                     arg.to_string().blue(),
                     utils::format_range(start, end),
                     count,
