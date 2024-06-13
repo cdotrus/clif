@@ -116,7 +116,7 @@ mod test {
                 version: cli.check(Arg::flag("version"))?,
                 command: cli.nest(Arg::subcommand("subcommand"))?,
             });
-            cli.is_empty()?;
+            cli.empty()?;
             m
         }
 

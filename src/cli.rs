@@ -450,7 +450,7 @@ impl Cli<Ready> {
             // construct the application
             Ok(program) => {
                 // verify the cli has no additional arguments if this is the top-level command being parsed
-                match cli.is_empty() {
+                match cli.empty() {
                     Ok(_) => {
                         let cli_opts = cli.options.clone();
                         std::mem::drop(cli);
@@ -510,6 +510,12 @@ impl Cli<Ready> {
 // Public API
 
 impl Cli<Memory> {
+    /// Checks if there are any arguments supplied to the command-line during
+    /// parsing.
+    pub fn is_empty(&self) -> bool {
+        self.tokens.len() == 0
+    }
+
     /// Sets the [Help] information for the command-line processor.
     ///
     /// Once the help information is updated, this function returns true if help
@@ -884,7 +890,7 @@ impl Cli<Memory> {
     ///
     /// This function errors if there are any unhandled arguments that were never
     /// requested during the [Memory] stage.
-    pub fn is_empty<'a>(&'a mut self) -> Result<()> {
+    pub fn empty<'a>(&'a mut self) -> Result<()> {
         self.state.proceed(MemoryState::End);
         self.try_to_help()?;
         // check if map is empty, and return the minimum found index.
@@ -1054,7 +1060,7 @@ impl Cli<Memory> {
             Ok(value)
         } else {
             self.try_to_help()?;
-            self.is_empty()?;
+            self.empty()?;
             Err(Error::new(
                 self.help.clone(),
                 ErrorKind::MissingPositional,
@@ -1314,7 +1320,7 @@ impl Cli<Memory> {
             Ok(value)
         } else {
             self.try_to_help()?;
-            self.is_empty()?;
+            self.empty()?;
             Err(Error::new(
                 self.help.clone(),
                 ErrorKind::MissingOption,
@@ -1333,7 +1339,7 @@ impl Cli<Memory> {
             Ok(value)
         } else {
             self.try_to_help()?;
-            self.is_empty()?;
+            self.empty()?;
             Err(Error::new(
                 self.help.clone(),
                 ErrorKind::MissingOption,
@@ -1946,7 +1952,7 @@ mod test {
         let _: String = cli.require_positional(Positional::new("command")).unwrap();
         let _: String = cli.require_positional(Positional::new("ip")).unwrap();
         // no more tokens left in stream
-        assert_eq!(cli.is_empty().unwrap(), ());
+        assert_eq!(cli.empty().unwrap(), ());
 
         let mut cli = Cli::new()
             .parse(args(vec!["orbit", "new", "rary.gates", symbol::FLAG]))
@@ -1957,7 +1963,7 @@ mod test {
         let _: String = cli.require_positional(Positional::new("command")).unwrap();
         let _: String = cli.require_positional(Positional::new("ip")).unwrap();
         // unexpected '--'
-        assert!(cli.is_empty().is_err());
+        assert!(cli.empty().is_err());
 
         let mut cli = Cli::new()
             .parse(args(vec![
@@ -1970,14 +1976,14 @@ mod test {
             ]))
             .save();
         // no tokens were removed (help will also raise error)
-        assert!(cli.is_empty().is_err());
+        assert!(cli.empty().is_err());
 
         let mut cli = Cli::new()
             .parse(args(vec!["orbit", symbol::FLAG, "some", "extra", "words"]))
             .save();
         let _: Vec<String> = cli.remainder().unwrap();
         // terminator removed as well as its arguments that were ignored
-        assert_eq!(cli.is_empty().unwrap(), ());
+        assert_eq!(cli.empty().unwrap(), ());
     }
 
     #[test]
@@ -2580,5 +2586,17 @@ mod test {
                 .unwrap(),
             vec![100]
         );
+    }
+
+    #[test]
+    fn is_empty_from_parsing() {
+        let cli = Cli::new().parse(args(vec!["cp"])).save();
+        assert_eq!(cli.is_empty(), true);
+
+        let cli = Cli::new().parse(args(vec!["cp", "echo"])).save();
+        assert_eq!(cli.is_empty(), false);
+
+        let cli = Cli::new().parse(args(vec!["cp", "--", "hello"])).save();
+        assert_eq!(cli.is_empty(), false);
     }
 }

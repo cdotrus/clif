@@ -52,7 +52,7 @@ mod tests {
                         rhs: cli.require(Arg::positional("rhs"))?,
                     };
                     // optional: verify the cli has no additional arguments if this is the top-level command being parsed
-                    cli.is_empty()?;
+                    cli.empty()?;
                     Ok(radd)
                 }
 
@@ -105,7 +105,7 @@ mod tests {
                         rhs: cli.require(Arg::positional("rhs"))?,
                     };
                     // optional: verify the cli has no additional arguments if this is the top-level command being parsed
-                    cli.is_empty()?;
+                    cli.empty()?;
                     Ok(radd)
                 }
 

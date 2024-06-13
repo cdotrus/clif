@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.0
+
+### Changes
+- Renames `is_empty` to `empty`
+- Adds new function to check if any arguments were supplied with `is_empty`
+- Updates get_between(...) error message
+
 ## 2.0.0
 
 ### Features
