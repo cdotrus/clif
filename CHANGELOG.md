@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.1
+
+### Changes
+- Updates repository links
+
 ## 2.1.0
 
 ### Changes
